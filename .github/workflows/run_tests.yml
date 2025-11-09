@@ -1,0 +1,21 @@
+name: Run tests
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  run_checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4   
+    - name: Check formatting
+      run: |
+        cargo fmt --all -- --check
+    - run: rustup component add clippy
+    - name: Run tests
+      run: |
+        cargo test --all-features
