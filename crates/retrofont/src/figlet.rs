@@ -13,6 +13,7 @@ pub struct FigletFont {
     pub name: String,
     header: String,
     comments: Vec<String>,
+    hard_blank: char,
     pub(crate) glyphs: Vec<Option<Glyph>>,
 }
 
@@ -22,6 +23,7 @@ impl FigletFont {
             name: name.into(),
             header: String::new(),
             comments: Vec::new(),
+            hard_blank: '$',
             glyphs: vec![None; 256],
         }
     }
@@ -51,6 +53,22 @@ impl FigletFont {
 
     pub fn glyph_count(&self) -> usize {
         self.glyphs.iter().filter(|g| g.is_some()).count()
+    }
+
+    /// Calculate the average width of defined glyphs (excluding space if undefined).
+    /// Returns None if no glyphs are defined.
+    pub(crate) fn spacing(&self) -> Option<usize> {
+        let widths: Vec<usize> = self
+            .glyphs
+            .iter()
+            .filter_map(|g| g.as_ref().map(|glyph| glyph.width))
+            .collect();
+
+        if widths.is_empty() {
+            None
+        } else {
+            Some(widths.iter().sum::<usize>() / widths.len())
+        }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
@@ -99,6 +117,10 @@ impl FigletFont {
         if !header_line.starts_with("flf2a") {
             return Err(FontError::Parse("not a flf2a header".into()));
         }
+
+        // Extract hard blank character (the character immediately after "flf2a")
+        let hard_blank = header_line.chars().nth(5).unwrap_or('$');
+
         let header_parts: Vec<&str> = header_line.split_whitespace().collect();
         if header_parts.len() < 6 {
             return Err(FontError::Parse("incomplete header".into()));
@@ -116,6 +138,7 @@ impl FigletFont {
 
         let mut font = FigletFont::new("figlet");
         font.header = header_line.to_string();
+        font.hard_blank = hard_blank;
 
         // Read comment lines
         for _ in 0..comment_count {
@@ -189,7 +212,12 @@ impl FigletFont {
             }
             max_width = max_width.max(line.len());
             for ch in line.chars() {
-                parts.push(GlyphPart::Char(ch));
+                // Convert hard blank character to HardBlank GlyphPart
+                if ch == self.hard_blank {
+                    parts.push(GlyphPart::HardBlank);
+                } else {
+                    parts.push(GlyphPart::Char(ch));
+                }
             }
         }
         let glyph = Glyph {

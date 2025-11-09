@@ -24,13 +24,13 @@ pub struct Cell {
 }
 
 impl Cell {
-    pub fn new(ch: char, fg: Option<u8>, bg: Option<u8>) -> Self {
+    pub fn new(ch: char, fg: Option<u8>, bg: Option<u8>, blink: bool) -> Self {
         Self {
             ch,
             fg,
             bg,
             bold: false,
-            blink: false,
+            blink,
         }
     }
 }

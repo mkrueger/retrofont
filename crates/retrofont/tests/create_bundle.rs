@@ -33,6 +33,7 @@ fn inspect_bundle_creation() {
                 ch: 'X',
                 fg: 0xF,
                 bg: 0x0,
+                blink: false,
             }],
         },
     );
@@ -45,6 +46,7 @@ fn inspect_bundle_creation() {
                 ch: 'Y',
                 fg: 0xF,
                 bg: 0x0,
+                blink: false,
             }],
         },
     );
@@ -57,6 +59,7 @@ fn inspect_bundle_creation() {
                 ch: 'Z',
                 fg: 0xF,
                 bg: 0x0,
+                blink: false,
             }],
         },
     );

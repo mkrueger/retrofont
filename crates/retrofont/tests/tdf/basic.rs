@@ -53,6 +53,7 @@ fn tdf_round_trip_color_attributes() {
                 ch: 'A',
                 fg: 0x1,
                 bg: 0xE,
+                blink: false,
             },
             GlyphPart::NewLine,
             GlyphPart::EndMarker,
@@ -60,6 +61,7 @@ fn tdf_round_trip_color_attributes() {
                 ch: 'B',
                 fg: 0x2,
                 bg: 0xF,
+                blink: false,
             },
         ],
     };
@@ -146,6 +148,7 @@ fn tdf_bundle_multiple_fonts() {
                 ch: 'B',
                 fg: 0x1,
                 bg: 0xF,
+                blink: false,
             }],
         },
     );
@@ -169,16 +172,19 @@ fn tdf_render_color_attribute_nibbles() {
                 ch: 'A',
                 fg: 0xA,
                 bg: 0xB,
+                blink: false,
             },
             GlyphPart::Colored {
                 ch: ' ',
                 fg: 0x0,
                 bg: 0x1,
+                blink: false,
             },
             GlyphPart::Colored {
                 ch: 'B',
                 fg: 0x2,
                 bg: 0xC,
+                blink: false,
             },
         ],
     };

@@ -29,7 +29,12 @@ pub enum GlyphPart {
     /// Plain Unicode character cell
     Char(char),
     /// Color font cell with per-cell attributes (foreground/background 0-15)
-    Colored { ch: char, fg: u8, bg: u8 },
+    Colored {
+        ch: char,
+        fg: u8,
+        bg: u8,
+        blink: bool,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -122,18 +127,16 @@ impl Glyph {
     /// Edit mode exposes internal markers (HardBlank NBSP, '@', 'O', '&').
     /// Display mode hides them, treating them largely as spaces.
     pub fn render<T: FontTarget>(&self, target: &mut T, style: RenderMode) -> Result<()> {
-        let outline_style = 0usize; // TODO: expose outline style selection via API.
-        let mut leading_space = true;
+        let outline_style = 0usize;
         for part in &self.parts {
             match part {
                 GlyphPart::NewLine => {
                     target.next_line().map_err(|_| FontError::InvalidGlyph)?;
-                    leading_space = true;
                 }
                 GlyphPart::EndMarker => {
                     if style == RenderMode::Edit {
                         target
-                            .draw(Cell::new('&', None, None))
+                            .draw(Cell::new('&', None, None, false))
                             .map_err(|_| FontError::InvalidGlyph)?;
                     }
                 }
@@ -144,57 +147,36 @@ impl Glyph {
                         ' '
                     };
                     target
-                        .draw(Cell::new(ch, None, None))
+                        .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
-                    leading_space = false;
                 }
                 GlyphPart::FillMarker => {
                     let ch = if style == RenderMode::Edit { '@' } else { ' ' };
                     target
-                        .draw(Cell::new(ch, None, None))
+                        .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
-                    leading_space = false;
                 }
                 GlyphPart::OutlineHole => {
                     let ch = if style == RenderMode::Edit { 'O' } else { ' ' };
                     target
-                        .draw(Cell::new(ch, None, None))
+                        .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
-                    leading_space = false;
                 }
                 GlyphPart::OutlinePlaceholder(b) => {
-                    if leading_space && *b == b' ' {
-                        target
-                            .draw(Cell::new(' ', None, None))
-                            .map_err(|_| FontError::InvalidGlyph)?;
-                        continue;
-                    }
-                    leading_space = false;
                     let ch = transform_outline(outline_style, *b);
                     target
-                        .draw(Cell::new(ch, None, None))
+                        .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::Char(c) => {
-                    if leading_space && *c == ' ' {
-                        target
-                            .draw(Cell::new(' ', None, None))
-                            .map_err(|_| FontError::InvalidGlyph)?;
-                        continue;
-                    }
-                    leading_space = false;
                     target
-                        .draw(Cell::new(*c, None, None))
+                        .draw(Cell::new(*c, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
-                GlyphPart::Colored { ch, fg, bg } => {
-                    if *bg == 0 && *ch == ' ' {
-                        continue; // transparency heuristic
-                    }
+                GlyphPart::Colored { ch, fg, bg, blink } => {
                     target
-                        .draw(Cell::new(*ch, Some(*fg), Some(*bg)))
+                        .draw(Cell::new(*ch, Some(*fg), Some(*bg), *blink))
                         .map_err(|_| FontError::InvalidGlyph)?;
-                    leading_space = false;
                 }
             }
         }

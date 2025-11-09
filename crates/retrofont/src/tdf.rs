@@ -79,6 +79,12 @@ impl TdfFont {
         self.glyphs.iter().filter(|g| g.is_some()).count()
     }
 
+    /// Calculate the average width of defined glyphs (excluding space if undefined).
+    /// Returns None if no glyphs are defined.
+    pub fn spacing(&self) -> Option<usize> {
+        Some(self.spacing.max(1) as usize)
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
         // Parse one or multiple fonts from bundle
         if bytes.len() < 20 {
@@ -210,13 +216,20 @@ impl TdfFont {
                             }
                             let attr = bytes[glyph_offset];
                             glyph_offset += 1;
-                            let fg = (attr >> 4) & 0x0F;
-                            let bg = attr & 0x0F;
+                            let fg = attr & 0x0F;
+                            let bg = (attr >> 4) & 0x07;
+                            let blink = (attr & 0x80) != 0;
+
                             if ch == 0xFF {
                                 parts.push(GlyphPart::HardBlank);
                             } else {
                                 let uc = crate::tdf::CP437_TO_UNICODE[ch as usize];
-                                parts.push(GlyphPart::Colored { ch: uc, fg, bg });
+                                parts.push(GlyphPart::Colored {
+                                    ch: uc,
+                                    fg,
+                                    bg,
+                                    blink,
+                                });
                             }
                         }
                         FontType::Block => {
@@ -328,10 +341,14 @@ impl TdfFont {
                             let mapped = UNICODE_TO_CP437.get(c).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);
                         }
-                        GlyphPart::Colored { ch, fg, bg } => {
+                        GlyphPart::Colored { ch, fg, bg, blink } => {
                             let mapped = UNICODE_TO_CP437.get(ch).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);
-                            glyph_block.push((*fg << 4) | (*bg & 0x0F));
+                            glyph_block.push(
+                                ((*bg & 0x07) << 4)
+                                    | (*fg & 0x0F)
+                                    | if *blink { 0x80 } else { 0x00 },
+                            );
                         }
                     }
                 }
@@ -351,9 +368,11 @@ impl TdfFont {
     pub fn font_type(&self) -> FontType {
         self.font_type
     }
+
     pub fn has_char(&self, ch: char) -> bool {
         (ch as u32) < 256 && self.glyphs[ch as usize].is_some()
     }
+
     pub fn render_char<T: FontTarget>(
         &self,
         target: &mut T,
