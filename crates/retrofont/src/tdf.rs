@@ -14,6 +14,9 @@ const FONT_NAME_LEN: usize = 12;
 const FONT_NAME_LEN_MAX: usize = 16; // 12 + 4 nulls
 const CHAR_TABLE_SIZE: usize = 94; // printable  !..~ range
 
+pub const MAX_TDF_GLYPH_WIDTH: usize = 30;
+pub const MAX_TDF_GLYPH_HEIGHT: usize = 12;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TdfFontType {
     Outline,
@@ -67,12 +70,12 @@ impl TdfFont {
         }
     }
 
-    pub fn add_glyph(&mut self, ch: u8, glyph: Glyph) {
-        self.glyphs.insert(ch as char, glyph);
+    pub fn add_glyph(&mut self, ch: char, glyph: Glyph) {
+        self.glyphs.insert(ch, glyph);
     }
 
     /// Returns the number of defined characters in this font.
-    pub fn char_count(&self) -> usize {
+    pub fn glyph_count(&self) -> usize {
         self.glyphs.len()
     }
 
@@ -82,7 +85,7 @@ impl TdfFont {
         Some(self.spacing.max(1) as usize)
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
+    pub fn load_bundle_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
         // Parse one or multiple fonts from bundle
         if bytes.len() < 20 {
             return Err(FontError::Parse("tdf: file too short".into()));
@@ -221,7 +224,7 @@ impl TdfFont {
                                 parts.push(GlyphPart::HardBlank);
                             } else {
                                 let uc = crate::tdf::CP437_TO_UNICODE[ch as usize];
-                                parts.push(GlyphPart::Colored {
+                                parts.push(GlyphPart::AnsiChar {
                                     ch: uc,
                                     fg,
                                     bg,
@@ -275,7 +278,7 @@ impl TdfFont {
         self.glyphs.iter().map(|(ch, glyph)| (*ch, glyph))
     }
 
-    pub fn as_tdf_bytes(&self) -> Result<Vec<u8>> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         out.push(THE_DRAW_FONT_ID.len() as u8 + 1);
         out.extend(THE_DRAW_FONT_ID);
@@ -284,7 +287,7 @@ impl TdfFont {
         Ok(out)
     }
 
-    pub fn create_bundle(fonts: &[TdfFont]) -> Result<Vec<u8>> {
+    pub fn serialize_bundle(fonts: &[TdfFont]) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         out.push(THE_DRAW_FONT_ID.len() as u8 + 1);
         out.extend(THE_DRAW_FONT_ID);
@@ -336,7 +339,7 @@ impl TdfFont {
                             let mapped = UNICODE_TO_CP437.get(c).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);
                         }
-                        GlyphPart::Colored { ch, fg, bg, blink } => {
+                        GlyphPart::AnsiChar { ch, fg, bg, blink } => {
                             let mapped = UNICODE_TO_CP437.get(ch).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);
                             glyph_block.push(

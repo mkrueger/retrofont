@@ -1,4 +1,4 @@
-use retrofont::{Cell, Font, FontTarget, RenderMode, Result};
+use retrofont::{Cell, Font, FontTarget, RenderOptions, Result};
 
 /// DOS default palette (VGA text mode colors)
 const DOS_PALETTE: [(u8, u8, u8); 16] = [
@@ -110,11 +110,11 @@ impl FontTarget for ConsoleRenderer {
 
 /// Convenience: render text into an ANSI colored String.
 /// Characters are placed horizontally, with each glyph rendered side-by-side.
-pub fn render_to_ansi(font: &Font, text: &str, style: RenderMode) -> Result<String> {
+pub fn render_to_ansi(font: &Font, text: &str, options: &RenderOptions) -> Result<String> {
     let mut renderer = ConsoleRenderer::new();
 
     for ch in text.chars() {
-        font.render_char(&mut renderer, ch, style)?;
+        font.render_glyph(&mut renderer, ch, options)?;
         renderer.next_char();
     }
 

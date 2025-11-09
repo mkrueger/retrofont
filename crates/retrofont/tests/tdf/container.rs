@@ -4,7 +4,7 @@ const TEST_FONT: &[u8] = include_bytes!("CODERX.TDF");
 
 #[test]
 fn test_load_bundle() {
-    let fonts = TdfFont::from_bytes(TEST_FONT).unwrap();
+    let fonts = TdfFont::load_bundle_bytes(TEST_FONT).unwrap();
     assert_eq!(6, fonts.len());
     for f in &fonts {
         assert_eq!(f.font_type(), TdfFontType::Color);
@@ -19,9 +19,9 @@ fn test_load_bundle() {
 
 #[test]
 fn test_save_and_reload_bundle() {
-    let fonts = TdfFont::from_bytes(TEST_FONT).unwrap();
-    let bundle = TdfFont::create_bundle(&fonts).unwrap();
-    let parsed = TdfFont::from_bytes(&bundle).unwrap();
+    let fonts = TdfFont::load_bundle_bytes(TEST_FONT).unwrap();
+    let bundle = TdfFont::serialize_bundle(&fonts).unwrap();
+    let parsed = TdfFont::load_bundle_bytes(&bundle).unwrap();
     assert_eq!(parsed.len(), 6);
     for (a, b) in fonts.iter().zip(parsed.iter()) {
         assert_eq!(a.name, b.name);

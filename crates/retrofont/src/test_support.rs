@@ -8,12 +8,12 @@ use crate::{Cell, FontError, FontTarget};
 /// A memory buffer target useful for tests.
 ///
 /// Captures rendered output into a 2D vector of cells that can be inspected.
-pub struct BufferTarget {
+pub struct MemoryBufferTarget {
     pub lines: Vec<Vec<Cell>>,
     cur_line: usize,
 }
 
-impl BufferTarget {
+impl MemoryBufferTarget {
     pub fn new() -> Self {
         Self {
             lines: vec![Vec::new()],
@@ -22,7 +22,7 @@ impl BufferTarget {
     }
 }
 
-impl FontTarget for BufferTarget {
+impl FontTarget for MemoryBufferTarget {
     type Error = FontError;
 
     fn draw(&mut self, cell: Cell) -> std::result::Result<(), Self::Error> {

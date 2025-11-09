@@ -9,7 +9,7 @@ mod glyph;
 pub mod tdf;
 pub use error::{FontError, Result};
 pub use font::Font;
-pub use glyph::{Glyph, GlyphPart, RenderMode};
+pub use glyph::{Glyph, GlyphPart, RenderMode, RenderOptions};
 
 // Test utilities
 pub mod test_support;
@@ -19,19 +19,12 @@ pub struct Cell {
     pub ch: char,
     pub fg: Option<u8>,
     pub bg: Option<u8>,
-    pub bold: bool,
     pub blink: bool,
 }
 
 impl Cell {
     pub fn new(ch: char, fg: Option<u8>, bg: Option<u8>, blink: bool) -> Self {
-        Self {
-            ch,
-            fg,
-            bg,
-            bold: false,
-            blink,
-        }
+        Self { ch, fg, bg, blink }
     }
 }
 

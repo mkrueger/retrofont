@@ -7,7 +7,7 @@ use retrofont::{
 fn inspect_bundle_creation() {
     let mut f1 = TdfFont::new("Alpha", TdfFontType::Block, 0);
     f1.add_glyph(
-        b'A',
+        'A',
         Glyph {
             width: 1,
             height: 1,
@@ -15,7 +15,7 @@ fn inspect_bundle_creation() {
         },
     );
     f1.add_glyph(
-        b'B',
+        'B',
         Glyph {
             width: 1,
             height: 1,
@@ -25,11 +25,11 @@ fn inspect_bundle_creation() {
 
     let mut f2 = TdfFont::new("Beta", TdfFontType::Color, 0);
     f2.add_glyph(
-        b'X',
+        'X',
         Glyph {
             width: 1,
             height: 1,
-            parts: vec![GlyphPart::Colored {
+            parts: vec![GlyphPart::AnsiChar {
                 ch: 'X',
                 fg: 0xF,
                 bg: 0x0,
@@ -38,11 +38,11 @@ fn inspect_bundle_creation() {
         },
     );
     f2.add_glyph(
-        b'Y',
+        'Y',
         Glyph {
             width: 1,
             height: 1,
-            parts: vec![GlyphPart::Colored {
+            parts: vec![GlyphPart::AnsiChar {
                 ch: 'Y',
                 fg: 0xF,
                 bg: 0x0,
@@ -51,11 +51,11 @@ fn inspect_bundle_creation() {
         },
     );
     f2.add_glyph(
-        b'Z',
+        'Z',
         Glyph {
             width: 1,
             height: 1,
-            parts: vec![GlyphPart::Colored {
+            parts: vec![GlyphPart::AnsiChar {
                 ch: 'Z',
                 fg: 0xF,
                 bg: 0x0,
@@ -66,7 +66,7 @@ fn inspect_bundle_creation() {
 
     let mut f3 = TdfFont::new("Gamma", TdfFontType::Outline, 0);
     f3.add_glyph(
-        b'1',
+        '1',
         Glyph {
             width: 1,
             height: 1,
@@ -74,7 +74,7 @@ fn inspect_bundle_creation() {
         },
     );
 
-    let bundle = TdfFont::create_bundle(&[f1, f2, f3]).unwrap();
+    let bundle = TdfFont::serialize_bundle(&[f1, f2, f3]).unwrap();
     std::fs::write("test_bundle.tdf", &bundle).unwrap();
     eprintln!(
         "Created test_bundle.tdf - run: cargo run --release -- inspect --font test_bundle.tdf"

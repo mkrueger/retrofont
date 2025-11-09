@@ -5,11 +5,30 @@ use crate::{
 // Use CP437 to Unicode mapping from TDF module for consistent Unicode output
 use crate::tdf::CP437_TO_UNICODE;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
+pub struct RenderOptions {
+    pub render_mode: RenderMode,
+    pub outline_style: usize,
+}
+
+impl RenderOptions {
+    pub fn display() -> Self {
+        RenderOptions::default()
+    }
+
+    pub fn edit() -> Self {
+        Self {
+            render_mode: RenderMode::Edit,
+            outline_style: 0,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub enum RenderMode {
+    #[default]
     Display,
     Edit,
-    Raw,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +48,7 @@ pub enum GlyphPart {
     /// Plain Unicode character cell
     Char(char),
     /// Color font cell with per-cell attributes (foreground/background 0-15)
-    Colored {
+    AnsiChar {
         ch: char,
         fg: u8,
         bg: u8,
@@ -126,22 +145,22 @@ impl Glyph {
     ///
     /// Edit mode exposes internal markers (HardBlank NBSP, '@', 'O', '&').
     /// Display mode hides them, treating them largely as spaces.
-    pub fn render<T: FontTarget>(&self, target: &mut T, style: RenderMode) -> Result<()> {
-        let outline_style = 0usize;
+    pub fn render<T: FontTarget>(&self, target: &mut T, options: &RenderOptions) -> Result<()> {
+        let outline_style = options.outline_style;
         for part in &self.parts {
             match part {
                 GlyphPart::NewLine => {
                     target.next_line().map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::EndMarker => {
-                    if style == RenderMode::Edit {
+                    if options.render_mode == RenderMode::Edit {
                         target
                             .draw(Cell::new('&', None, None, false))
                             .map_err(|_| FontError::InvalidGlyph)?;
                     }
                 }
                 GlyphPart::HardBlank => {
-                    let ch = if style == RenderMode::Edit {
+                    let ch = if options.render_mode == RenderMode::Edit {
                         CP437_TO_UNICODE[0xFF]
                     } else {
                         ' '
@@ -151,13 +170,21 @@ impl Glyph {
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::FillMarker => {
-                    let ch = if style == RenderMode::Edit { '@' } else { ' ' };
+                    let ch = if options.render_mode == RenderMode::Edit {
+                        '@'
+                    } else {
+                        ' '
+                    };
                     target
                         .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::OutlineHole => {
-                    let ch = if style == RenderMode::Edit { 'O' } else { ' ' };
+                    let ch = if options.render_mode == RenderMode::Edit {
+                        'O'
+                    } else {
+                        ' '
+                    };
                     target
                         .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
@@ -173,7 +200,7 @@ impl Glyph {
                         .draw(Cell::new(*c, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
-                GlyphPart::Colored { ch, fg, bg, blink } => {
+                GlyphPart::AnsiChar { ch, fg, bg, blink } => {
                     target
                         .draw(Cell::new(*ch, Some(*fg), Some(*bg), *blink))
                         .map_err(|_| FontError::InvalidGlyph)?;

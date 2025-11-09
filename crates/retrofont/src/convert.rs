@@ -3,20 +3,27 @@ use crate::{
     error::{FontError, Result},
     figlet::FigletFont,
     glyph::{Glyph, GlyphPart},
-    tdf::{TdfFont, TdfFontType},
+    tdf::{TdfFont, TdfFontType, MAX_TDF_GLYPH_HEIGHT, MAX_TDF_GLYPH_WIDTH},
 };
 
 /// TDF supports printable ASCII range: '!' (0x21) through '~' (0x7E) = 94 characters
-const TDF_FIRST_CHAR: u8 = b'!' as u8; // 0x21
-const TDF_LAST_CHAR: u8 = b'~' as u8; // 0x7E
+const TDF_FIRST_CHAR: char = '!'; // 0x21
+const TDF_LAST_CHAR: char = '~'; // 0x7E
 
 /// Check if a FIGlet font is compatible with TDF conversion.
 ///
 /// - It has at least one character in the TDF printable range (! to ~)
+/// - All glyphs have width and height that fit in u8 (max 255)
 /// - The glyphs don't use features incompatible with the target TDF type
-pub fn is_figlet_compatible_with_tdf(fig: &FigletFont, _target_type: TdfFontType) -> bool {
-    // Check if font has any characters in the TDF range
-    (TDF_FIRST_CHAR..=TDF_LAST_CHAR).any(|code| fig.glyph(code as char).is_some())
+pub fn can_convert_figlet_to_tdf(fig: &FigletFont, _target_type: TdfFontType) -> bool {
+    // Check if font has any characters in the TDF range with valid dimensions
+    (TDF_FIRST_CHAR..=TDF_LAST_CHAR).any(|code| {
+        if let Some(glyph) = fig.glyph(code as char) {
+            glyph.width <= MAX_TDF_GLYPH_WIDTH && glyph.height <= MAX_TDF_GLYPH_HEIGHT
+        } else {
+            false
+        }
+    })
 }
 
 /// Convert a FIGlet font into a TDF font with the requested target type.
@@ -35,13 +42,13 @@ pub fn is_figlet_compatible_with_tdf(fig: &FigletFont, _target_type: TdfFontType
 /// - The target type is not supported (must be Block, Color)
 /// - Outline is currently unsupported
 /// - The font is incompatible with the target type
-pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfFont> {
+pub fn figlet_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfFont> {
     if !matches!(target_type, TdfFontType::Color | TdfFontType::Block) {
         return Err(FontError::UnsupportedType);
     }
 
     // Check compatibility
-    if !is_figlet_compatible_with_tdf(fig, target_type) {
+    if !can_convert_figlet_to_tdf(fig, target_type) {
         return Err(FontError::Parse(
             "FIGlet font is not compatible with TDF conversion".into(),
         ));
@@ -53,6 +60,11 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
     for code in TDF_FIRST_CHAR..=TDF_LAST_CHAR {
         let ch = code as char;
         if let Some(g) = fig.glyph(ch) {
+            // Skip glyphs that exceed TDF dimension limits
+            if g.width > MAX_TDF_GLYPH_WIDTH || g.height > MAX_TDF_GLYPH_HEIGHT {
+                continue;
+            }
+
             let mut parts = Vec::new();
             let mut width = 0usize;
             let mut line_width = 0usize;
@@ -66,10 +78,11 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
                         line_width = 0;
                         lines += 1;
                     }
+                    // Single-char parts (Char, HardBlank, EndMarker)
                     GlyphPart::Char(c) => {
                         // Convert to Colored if target is Color type, otherwise keep as Char
                         if target_type == TdfFontType::Color {
-                            parts.push(GlyphPart::Colored {
+                            parts.push(GlyphPart::AnsiChar {
                                 ch: *c,
                                 fg: 7, // Light gray (DOS default foreground)
                                 bg: 0, // Black (DOS default background)
@@ -88,10 +101,10 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
                         parts.push(GlyphPart::EndMarker);
                         line_width += 1;
                     }
-                    GlyphPart::Colored { ch, fg, bg, blink } => {
+                    GlyphPart::AnsiChar { ch, fg, bg, blink } => {
                         // If converting to Block or Outline, strip color and use plain Char
                         if target_type == TdfFontType::Color {
-                            parts.push(GlyphPart::Colored {
+                            parts.push(GlyphPart::AnsiChar {
                                 ch: *ch,
                                 fg: *fg,
                                 bg: *bg,

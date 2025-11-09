@@ -1,5 +1,5 @@
 use retrofont::{
-    convert::{convert_to_tdf, is_figlet_compatible_with_tdf},
+    convert::{can_convert_figlet_to_tdf, figlet_to_tdf},
     figlet::FigletFont,
     tdf::TdfFontType,
 };
@@ -12,19 +12,19 @@ fn test_figlet_to_tdf_compatibility() {
 
     // Check compatibility with Block type
     assert!(
-        is_figlet_compatible_with_tdf(&fig, TdfFontType::Block),
+        can_convert_figlet_to_tdf(&fig, TdfFontType::Block),
         "doom.flf should be compatible with Block type"
     );
 
     // Check compatibility with Color type
     assert!(
-        is_figlet_compatible_with_tdf(&fig, TdfFontType::Color),
+        can_convert_figlet_to_tdf(&fig, TdfFontType::Color),
         "doom.flf should be compatible with Color type"
     );
 
     // Check compatibility with Outline type
     assert!(
-        is_figlet_compatible_with_tdf(&fig, TdfFontType::Outline),
+        can_convert_figlet_to_tdf(&fig, TdfFontType::Outline),
         "doom.flf should be compatible with Outline type"
     );
 }
@@ -36,7 +36,7 @@ fn test_figlet_to_tdf_conversion_block() {
     let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
 
     // Convert to TDF Block type
-    let tdf = convert_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
+    let tdf = figlet_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
 
     // Check basic properties
     assert_eq!(tdf.name, fig.name);
@@ -49,7 +49,7 @@ fn test_figlet_to_tdf_conversion_block() {
 
     // Check that character count is reasonable
     assert!(
-        tdf.char_count() > 0,
+        tdf.glyph_count() > 0,
         "Should have converted some characters"
     );
 }
@@ -61,7 +61,7 @@ fn test_figlet_to_tdf_only_converts_printable_range() {
     let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
 
     // Convert to TDF
-    let tdf = convert_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
+    let tdf = figlet_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
 
     // TDF should only have characters in the printable range (! to ~)
     // Characters outside this range should not be converted
@@ -94,14 +94,14 @@ fn test_figlet_to_tdf_roundtrip() {
     let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
 
     // Convert to TDF
-    let tdf = convert_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
+    let tdf = figlet_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
 
     // Serialize to bytes
-    let tdf_bytes = tdf.as_tdf_bytes().expect("Serialization should succeed");
+    let tdf_bytes = tdf.to_bytes().expect("Serialization should succeed");
 
     // Parse back
     let tdf_fonts =
-        retrofont::tdf::TdfFont::from_bytes(&tdf_bytes).expect("Should parse TDF bytes");
+        retrofont::tdf::TdfFont::load_bundle_bytes(&tdf_bytes).expect("Should parse TDF bytes");
 
     assert_eq!(tdf_fonts.len(), 1, "Should have one font in bundle");
     let tdf_parsed = &tdf_fonts[0];
@@ -112,8 +112,8 @@ fn test_figlet_to_tdf_roundtrip() {
 
     // Check character count matches
     assert_eq!(
-        tdf_parsed.char_count(),
-        tdf.char_count(),
+        tdf_parsed.glyph_count(),
+        tdf.glyph_count(),
         "Character count should match after roundtrip"
     );
 }

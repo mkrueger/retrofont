@@ -11,9 +11,9 @@ use zip::ZipArchive;
 #[derive(Clone)]
 pub struct FigletFont {
     pub name: String,
-    header: String,
-    comments: Vec<String>,
-    hard_blank: char,
+    pub header: String,
+    pub comments: Vec<String>,
+    pub hard_blank: char,
     pub(crate) glyphs: HashMap<char, Glyph>,
 }
 
@@ -38,14 +38,10 @@ impl FigletFont {
         self.glyphs.iter().map(|(ch, glyph)| (*ch, glyph))
     }
 
-    pub fn load(path: &Path) -> Result<Self> {
+    pub fn load_file(path: &Path) -> Result<Self> {
         let bytes =
             fs::read(path).map_err(|e| FontError::Parse(format!("figlet read error: {e}")))?;
         Self::from_bytes(&bytes)
-    }
-
-    pub fn header(&self) -> &str {
-        &self.header
     }
 
     pub fn glyph_count(&self) -> usize {
@@ -219,9 +215,7 @@ impl FigletFont {
         };
         self.glyphs.insert(ch as char, glyph);
     }
-}
 
-impl FigletFont {
     pub fn has_char(&self, ch: char) -> bool {
         self.glyphs.contains_key(&ch)
     }

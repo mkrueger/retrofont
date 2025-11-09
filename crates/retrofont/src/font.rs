@@ -1,4 +1,8 @@
-use crate::{figlet::FigletFont, tdf::TdfFont, FontError, FontTarget, RenderMode, Result};
+use std::io::Read;
+
+use crate::{
+    figlet::FigletFont, glyph::RenderOptions, tdf::TdfFont, FontError, FontTarget, Result,
+};
 
 /// Unified font enum encapsulating all supported font kinds.
 ///
@@ -32,11 +36,11 @@ impl Font {
         }
     }
 
-    pub fn render_char<T: FontTarget>(
+    pub fn render_glyph<T: FontTarget>(
         &self,
         target: &mut T,
         ch: char,
-        mode: RenderMode,
+        options: &RenderOptions,
     ) -> Result<()> {
         // Special handling for space character if not defined in font
         if ch == ' ' && !self.has_char(' ') {
@@ -83,7 +87,7 @@ impl Font {
         let Some(glyph) = glyph else {
             return Err(FontError::UnknownChar(ch));
         };
-        glyph.render(target, mode)
+        glyph.render(target, &options)
     }
 
     /// Load fonts from raw bytes, attempting FIGlet first (header check) then TDF.
@@ -92,7 +96,7 @@ impl Font {
     /// - A single font for FIGlet files
     /// - Multiple fonts for TDF bundles (which can contain many fonts)
     /// - An error if the format is unrecognized or parsing fails
-    pub fn from_bytes(bytes: &[u8]) -> Result<Vec<Font>> {
+    pub fn load_bytes(bytes: &[u8]) -> Result<Vec<Font>> {
         // Attempt FIGlet: header starts with 'flf2a'
         if bytes.len() >= 5 && &bytes[0..5] == b"flf2a" {
             let fig = FigletFont::from_bytes(bytes)?;
@@ -101,7 +105,7 @@ impl Font {
         // Attempt TDF: id length byte followed by 'TheDraw FONTS file'
         if !bytes.is_empty() && bytes[0] as usize == 19 && bytes.len() >= 19 + 1 {
             if bytes.len() >= 20 && &bytes[1..20] == b"TheDraw FONTS file" {
-                let fonts = TdfFont::from_bytes(bytes)?;
+                let fonts = TdfFont::load_bundle_bytes(bytes)?;
                 if fonts.is_empty() {
                     return Err(FontError::Parse("tdf: no fonts in bundle".into()));
                 }
@@ -109,5 +113,15 @@ impl Font {
             }
         }
         Err(FontError::Parse("unrecognized font format".into()))
+    }
+
+    pub fn load_reader<R: Read>(reader: R) -> Result<Vec<Font>> {
+        let mut buf = Vec::new();
+        let mut reader = reader;
+        // Map IO errors into a parse error (alternatively introduce an Io variant later)
+        reader
+            .read_to_end(&mut buf)
+            .map_err(|e| FontError::Parse(format!("io error reading font data: {e}")))?;
+        Self::load_bytes(&buf)
     }
 }

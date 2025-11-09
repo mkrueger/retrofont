@@ -1,15 +1,31 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use retrofont::{
-    convert::convert_to_tdf,
+    convert::figlet_to_tdf,
     figlet::FigletFont,
     tdf::{TdfFont, TdfFontType},
-    Font, RenderMode,
+    Font, RenderOptions,
 };
 use std::fs;
 
 use crate::console::render_to_ansi;
 mod console;
+
+fn validate_outline_style(s: &str) -> Result<usize, String> {
+    let value: usize = s
+        .parse()
+        .map_err(|_| format!("'{}' is not a valid number", s))?;
+
+    if value >= OUTLINE_STYLE_COUNT {
+        Err(format!(
+            "outline style {} is out of range (valid: 0..{})",
+            value,
+            OUTLINE_STYLE_COUNT - 1
+        ))
+    } else {
+        Ok(value)
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "retrofont", about = "Retro font toolkit CLI")]
@@ -17,6 +33,7 @@ struct Cli {
     #[command(subcommand)]
     command: Cmd,
 }
+const OUTLINE_STYLE_COUNT: usize = 19;
 
 #[derive(Subcommand)]
 enum Cmd {
@@ -30,6 +47,13 @@ enum Cmd {
         fg: u8,
         #[arg(long, default_value = "0")]
         bg: u8,
+        #[arg(
+            long,
+            default_value = "0",
+            help = "Outline style index (0..18). Only used for outline/convert modes.",
+            value_parser = validate_outline_style
+        )]
+        outline: usize,
         #[arg(long)]
         edit: bool,
     },
@@ -53,26 +77,40 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Cmd::Render {
-            font, text, edit, ..
+            font,
+            text,
+            edit,
+            outline,
+            ..
         } => {
+            // Extra defensive check (in case future changes bypass clap range)
+            if outline >= OUTLINE_STYLE_COUNT {
+                anyhow::bail!(
+                    "Outline style {} out of range (valid: 0..={})",
+                    outline,
+                    OUTLINE_STYLE_COUNT - 1
+                );
+            }
+
             let bytes = fs::read(&font)?;
-            let mode = if edit {
-                RenderMode::Edit
+            let mut mode = if edit {
+                RenderOptions::edit()
             } else {
-                RenderMode::Display
+                RenderOptions::default()
             };
+            mode.outline_style = outline;
             // crude format detection
             let font_enum = if font.ends_with(".flf") {
                 Font::Figlet(FigletFont::from_bytes(&bytes)?)
             } else {
-                let mut fonts = TdfFont::from_bytes(&bytes)?;
+                let mut fonts = TdfFont::load_bundle_bytes(&bytes)?;
                 let first = fonts
                     .drain(..)
                     .next()
                     .ok_or_else(|| anyhow::anyhow!("no font in file"))?;
                 Font::Tdf(first)
             };
-            let ansi = render_to_ansi(&font_enum, &text, mode)?;
+            let ansi = render_to_ansi(&font_enum, &text, &mode)?;
             println!("{ansi}");
         }
 
@@ -85,9 +123,9 @@ fn main() -> Result<()> {
                 "color" => TdfFontType::Color,
                 _ => TdfFontType::Color,
             };
-            let tdf = convert_to_tdf(&fig, target_type)?;
+            let tdf = figlet_to_tdf(&fig, target_type)?;
             // placeholder serialization (real TDF writer TBD)
-            match tdf.as_tdf_bytes() {
+            match tdf.to_bytes() {
                 Ok(bytes) => fs::write(&output, bytes)?,
                 Err(e) => eprintln!("Failed to convert TDF font to bytes: {e}"),
             }
@@ -99,7 +137,7 @@ fn main() -> Result<()> {
                 println!("FIGlet font: {}", f.name);
                 println!("  Defined characters: {}", f.glyph_count());
             } else {
-                let fonts = TdfFont::from_bytes(&bytes)?;
+                let fonts = TdfFont::load_bundle_bytes(&bytes)?;
                 let font_count = fonts.len();
                 if font_count > 1 {
                     println!("TDF bundle: {} fonts", font_count);
@@ -110,7 +148,7 @@ fn main() -> Result<()> {
                     } else {
                         println!("TDF font: {} ({:?})", f.name, f.font_type());
                     }
-                    println!("  Defined characters: {}", f.char_count());
+                    println!("  Defined characters: {}", f.glyph_count());
                 }
             }
         }
