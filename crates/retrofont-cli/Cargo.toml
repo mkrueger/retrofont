@@ -6,6 +6,8 @@ authors = ["Mike Krüger <mkrueger@posteo.de>"]
 license = "MIT OR Apache-2.0"
 description = "CLI for retrofont: Render and convert retro ASCII/ANSI art fonts"
 repository = "https://github.com/mkrueger/retrofont"
+keywords = ["ascii-art", "ansi", "figlet", "tdf", "thedraw"]
+categories = ["text-processing", "command-line-utilities", "parser-implementations"]
 
 [[bin]]
 name = "retrofont"

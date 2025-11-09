@@ -6,6 +6,8 @@ authors = ["Mike Krüger <mkrueger@posteo.de>"]
 license = "MIT OR Apache-2.0"
 description = "Retro terminal font toolkit: TDF/FIGlet parsing, rendering, conversion."
 repository = "https://github.com/mkrueger/retrofont"
+keywords = ["ascii-art", "ansi", "figlet", "tdf", "thedraw"]
+categories = ["text-processing", "command-line-utilities", "parser-implementations"]
 
 [features]
 default = ["tdf", "figlet", "convert"]
