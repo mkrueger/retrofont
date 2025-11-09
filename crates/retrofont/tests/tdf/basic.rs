@@ -1,5 +1,5 @@
 use retrofont::{
-    tdf::{TdfFontType, TdfFont},
+    tdf::{TdfFont, TdfFontType},
     test_support::BufferTarget,
     Font, Glyph, GlyphPart, RenderMode,
 };
@@ -190,7 +190,8 @@ fn tdf_render_color_attribute_nibbles() {
     };
     font.add_glyph(b'C', glyph);
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'C', RenderMode::Display)
+    Font::Tdf(font)
+        .render_char(&mut target, 'C', RenderMode::Display)
         .unwrap();
     let line = lines_to_strings(&target).pop().unwrap();
     assert_eq!(line, "A B");
@@ -215,7 +216,8 @@ fn tdf_outline_markers() {
     };
     font.add_glyph(b'A', glyph);
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'A', RenderMode::Display)
+    Font::Tdf(font)
+        .render_char(&mut target, 'A', RenderMode::Display)
         .unwrap();
     let line = lines_to_strings(&target)[0].clone();
     // Leading space + FillMarker + OutlineHole + 2 placeholders = various chars
@@ -237,7 +239,8 @@ fn tdf_edit_mode_preserves_markers() {
     };
     font.add_glyph(b'E', glyph);
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'E', RenderMode::Edit)
+    Font::Tdf(font)
+        .render_char(&mut target, 'E', RenderMode::Edit)
         .unwrap();
     let line = lines_to_strings(&target)[0].clone();
     assert_eq!(line, "@O&");

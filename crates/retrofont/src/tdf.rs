@@ -1,8 +1,7 @@
 //! TDF font support (placeholder implementation)
 use crate::{
     error::{FontError, Result},
-    glyph::{Glyph, GlyphPart, RenderMode},
-    FontTarget,
+    glyph::{Glyph, GlyphPart},
 };
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -55,7 +54,7 @@ pub struct TdfFont {
     pub name: String,
     pub font_type: TdfFontType,
     spacing: i32,
-    glyphs: Vec<Option<Glyph>>, // full 256 for convenience, but TDF maps subset
+    glyphs: HashMap<char, Glyph>,
 }
 
 impl TdfFont {
@@ -64,19 +63,17 @@ impl TdfFont {
             name: name.into(),
             font_type,
             spacing,
-            glyphs: vec![None; 256],
+            glyphs: HashMap::new(),
         }
     }
 
     pub fn add_glyph(&mut self, ch: u8, glyph: Glyph) {
-        if (ch as usize) < 256 {
-            self.glyphs[ch as usize] = Some(glyph);
-        }
+        self.glyphs.insert(ch as char, glyph);
     }
 
     /// Returns the number of defined characters in this font.
     pub fn char_count(&self) -> usize {
-        self.glyphs.iter().filter(|g| g.is_some()).count()
+        self.glyphs.len()
     }
 
     /// Calculate the average width of defined glyphs (excluding space if undefined).
@@ -263,7 +260,8 @@ impl TdfFont {
                     height,
                     parts,
                 };
-                font.glyphs[b' ' as usize + 1 + i] = Some(glyph); // map printable range starting at space+1
+                let ch = (b' ' + 1 + i as u8) as char; // map printable range starting at space+1
+                font.glyphs.insert(ch, glyph);
             }
             o += block_size;
             fonts.push(font);
@@ -274,10 +272,7 @@ impl TdfFont {
     /// Iterate over all defined glyphs, yielding (char, &Glyph).
     /// Skips empty slots. Only characters with code < 256 are considered.
     pub fn iter_glyphs(&self) -> impl Iterator<Item = (char, &Glyph)> {
-        self.glyphs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, g)| g.as_ref().map(|glyph| (i as u8 as char, glyph)))
+        self.glyphs.iter().map(|(ch, glyph)| (*ch, glyph))
     }
 
     pub fn as_tdf_bytes(&self) -> Result<Vec<u8>> {
@@ -324,8 +319,8 @@ impl TdfFont {
         let mut lookup = Vec::new();
         let mut glyph_block = Vec::new();
         for i in 0..CHAR_TABLE_SIZE {
-            let code_index = b' ' as usize + 1 + i;
-            if let Some(g) = &self.glyphs.get(code_index).and_then(|g| g.as_ref()) {
+            let ch = (b' ' + 1 + i as u8) as char;
+            if let Some(g) = self.glyphs.get(&ch) {
                 lookup.extend(u16::to_le_bytes(glyph_block.len() as u16));
                 glyph_block.push(g.width as u8);
                 glyph_block.push(g.height as u8);
@@ -345,9 +340,7 @@ impl TdfFont {
                             let mapped = UNICODE_TO_CP437.get(ch).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);
                             glyph_block.push(
-                                ((*bg & 0x07) << 4)
-                                    | (*fg & 0x0F)
-                                    | if *blink { 0x80 } else { 0x00 },
+                                ((bg & 0x07) << 4) | (fg & 0x0F) | if *blink { 0x80 } else { 0x00 },
                             );
                         }
                     }
@@ -362,30 +355,19 @@ impl TdfFont {
         out.extend(glyph_block);
         Ok(())
     }
-}
 
-impl TdfFont {
+    /// Safe access to a glyph by raw byte code (0-255).
+    /// Mirrors `FigletFont::glyph` for API consistency.
+    pub fn glyph(&self, ch: char) -> Option<&Glyph> {
+        self.glyphs.get(&ch)
+    }
+
     pub fn font_type(&self) -> TdfFontType {
         self.font_type
     }
 
     pub fn has_char(&self, ch: char) -> bool {
-        (ch as u32) < 256 && self.glyphs[ch as usize].is_some()
-    }
-
-    pub fn render_char<T: FontTarget>(
-        &self,
-        target: &mut T,
-        ch: char,
-        mode: RenderMode,
-    ) -> Result<()> {
-        let Some(g) = (ch as u32 <= 255)
-            .then(|| self.glyphs[ch as usize].clone())
-            .flatten()
-        else {
-            return Err(FontError::UnknownChar(ch));
-        };
-        g.render(target, mode)
+        self.glyphs.contains_key(&ch)
     }
 }
 

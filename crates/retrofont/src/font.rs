@@ -76,10 +76,14 @@ impl Font {
             ch
         };
 
-        match self {
-            Font::Figlet(f) => f.render_char(target, char_to_render, mode),
-            Font::Tdf(f) => f.render_char(target, char_to_render, mode),
-        }
+        let glyph = match self {
+            Font::Figlet(f) => f.glyph(char_to_render),
+            Font::Tdf(f) => f.glyph(char_to_render),
+        };
+        let Some(glyph) = glyph else {
+            return Err(FontError::UnknownChar(ch));
+        };
+        glyph.render(target, mode)
     }
 
     /// Load fonts from raw bytes, attempting FIGlet first (header check) then TDF.

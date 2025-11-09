@@ -1,4 +1,4 @@
-use retrofont::tdf::{TdfFontType, TdfFont};
+use retrofont::tdf::{TdfFont, TdfFontType};
 
 const TEST_FONT: &[u8] = include_bytes!("CODERX.TDF");
 

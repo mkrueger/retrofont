@@ -1,5 +1,5 @@
 use retrofont::{
-    tdf::{TdfFontType, TdfFont},
+    tdf::{TdfFont, TdfFontType},
     Glyph, GlyphPart,
 };
 

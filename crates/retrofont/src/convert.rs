@@ -3,12 +3,12 @@ use crate::{
     error::{FontError, Result},
     figlet::FigletFont,
     glyph::{Glyph, GlyphPart},
-    tdf::{TdfFontType, TdfFont},
+    tdf::{TdfFont, TdfFontType},
 };
 
 /// TDF supports printable ASCII range: '!' (0x21) through '~' (0x7E) = 94 characters
-const TDF_FIRST_CHAR: u8 = b'!' as u8;  // 0x21
-const TDF_LAST_CHAR: u8 = b'~' as u8;   // 0x7E
+const TDF_FIRST_CHAR: u8 = b'!' as u8; // 0x21
+const TDF_LAST_CHAR: u8 = b'~' as u8; // 0x7E
 
 /// Check if a FIGlet font is compatible with TDF conversion.
 ///
@@ -16,8 +16,7 @@ const TDF_LAST_CHAR: u8 = b'~' as u8;   // 0x7E
 /// - The glyphs don't use features incompatible with the target TDF type
 pub fn is_figlet_compatible_with_tdf(fig: &FigletFont, _target_type: TdfFontType) -> bool {
     // Check if font has any characters in the TDF range
-    (TDF_FIRST_CHAR..=TDF_LAST_CHAR)
-        .any(|ch| fig.glyph(ch).is_some())
+    (TDF_FIRST_CHAR..=TDF_LAST_CHAR).any(|code| fig.glyph(code as char).is_some())
 }
 
 /// Convert a FIGlet font into a TDF font with the requested target type.
@@ -29,38 +28,36 @@ pub fn is_figlet_compatible_with_tdf(fig: &FigletFont, _target_type: TdfFontType
 /// * Spacing is heuristically set to 1; future versions may derive optimal spacing.
 /// * Color/outline conversion is currently a straight part copy; smarter outline mapping could
 ///   collapse placeholder sets.
-/// 
+///
 /// # Errors
-/// 
+///
 /// Returns an error if:
 /// - The target type is not supported (must be Block, Color)
 /// - Outline is currently unsupported
 /// - The font is incompatible with the target type
 pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfFont> {
-    if !matches!(
-        target_type,
-        TdfFontType::Color | TdfFontType::Block
-    ) {
+    if !matches!(target_type, TdfFontType::Color | TdfFontType::Block) {
         return Err(FontError::UnsupportedType);
     }
-    
+
     // Check compatibility
     if !is_figlet_compatible_with_tdf(fig, target_type) {
         return Err(FontError::Parse(
-            "FIGlet font is not compatible with TDF conversion".into()
+            "FIGlet font is not compatible with TDF conversion".into(),
         ));
     }
-    
+
     let mut tdf = TdfFont::new(fig.name.clone(), target_type, 1);
-    
+
     // Only convert characters in the TDF printable range: ! (0x21) through ~ (0x7E)
     for code in TDF_FIRST_CHAR..=TDF_LAST_CHAR {
-        if let Some(g) = fig.glyph(code) {
+        let ch = code as char;
+        if let Some(g) = fig.glyph(ch) {
             let mut parts = Vec::new();
             let mut width = 0usize;
             let mut line_width = 0usize;
             let mut lines = 1usize;
-            
+
             for part in &g.parts {
                 match part {
                     GlyphPart::NewLine => {
@@ -74,8 +71,8 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
                         if target_type == TdfFontType::Color {
                             parts.push(GlyphPart::Colored {
                                 ch: *c,
-                                fg: 7,  // Light gray (DOS default foreground)
-                                bg: 0,  // Black (DOS default background)
+                                fg: 7, // Light gray (DOS default foreground)
+                                bg: 0, // Black (DOS default background)
                                 blink: false,
                             });
                         } else {
@@ -94,9 +91,9 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
                     GlyphPart::Colored { ch, fg, bg, blink } => {
                         // If converting to Block or Outline, strip color and use plain Char
                         if target_type == TdfFontType::Color {
-                            parts.push(GlyphPart::Colored { 
-                                ch: *ch, 
-                                fg: *fg, 
+                            parts.push(GlyphPart::Colored {
+                                ch: *ch,
+                                fg: *fg,
                                 bg: *bg,
                                 blink: *blink,
                             });
@@ -119,7 +116,7 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
                     }
                 }
             }
-            
+
             width = width.max(line_width);
             let glyph = Glyph {
                 width,
@@ -129,6 +126,6 @@ pub fn convert_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfF
             tdf.add_glyph(code, glyph);
         }
     }
-    
+
     Ok(tdf)
 }

@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use retrofont::{
     convert::convert_to_tdf,
     figlet::FigletFont,
-    tdf::{TdfFontType, TdfFont},
+    tdf::{TdfFont, TdfFontType},
     Font, RenderMode,
 };
 use std::fs;
@@ -75,7 +75,7 @@ fn main() -> Result<()> {
             let ansi = render_to_ansi(&font_enum, &text, mode)?;
             println!("{ansi}");
         }
-        
+
         Cmd::Convert { input, output, ty } => {
             let bytes = fs::read(&input)?;
             let fig = FigletFont::from_bytes(&bytes)?;

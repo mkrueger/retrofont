@@ -1,9 +1,9 @@
 //! FIGlet font placeholder.
 use crate::{
     error::{FontError, Result},
-    glyph::{Glyph, GlyphPart, RenderMode},
-    FontTarget,
+    glyph::{Glyph, GlyphPart},
 };
+use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use std::{fs, path::Path};
 use zip::ZipArchive;
@@ -14,7 +14,7 @@ pub struct FigletFont {
     header: String,
     comments: Vec<String>,
     hard_blank: char,
-    pub(crate) glyphs: Vec<Option<Glyph>>,
+    pub(crate) glyphs: HashMap<char, Glyph>,
 }
 
 impl FigletFont {
@@ -24,21 +24,18 @@ impl FigletFont {
             header: String::new(),
             comments: Vec::new(),
             hard_blank: '$',
-            glyphs: vec![None; 256],
+            glyphs: HashMap::new(),
         }
     }
 
     /// Safe access to a glyph by byte code (0-255).
-    pub fn glyph(&self, ch: u8) -> Option<&Glyph> {
-        self.glyphs.get(ch as usize).and_then(|g| g.as_ref())
+    pub fn glyph(&self, ch: char) -> Option<&Glyph> {
+        self.glyphs.get(&ch)
     }
 
     /// Iterate over all defined FIGlet glyphs as (char, &Glyph).
     pub fn iter_glyphs(&self) -> impl Iterator<Item = (char, &Glyph)> {
-        self.glyphs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, g)| g.as_ref().map(|glyph| (i as u8 as char, glyph)))
+        self.glyphs.iter().map(|(ch, glyph)| (*ch, glyph))
     }
 
     pub fn load(path: &Path) -> Result<Self> {
@@ -52,23 +49,18 @@ impl FigletFont {
     }
 
     pub fn glyph_count(&self) -> usize {
-        self.glyphs.iter().filter(|g| g.is_some()).count()
+        self.glyphs.len()
     }
 
     /// Calculate the average width of defined glyphs (excluding space if undefined).
     /// Returns None if no glyphs are defined.
     pub(crate) fn spacing(&self) -> Option<usize> {
-        let widths: Vec<usize> = self
-            .glyphs
-            .iter()
-            .filter_map(|g| g.as_ref().map(|glyph| glyph.width))
-            .collect();
-
-        if widths.is_empty() {
-            None
-        } else {
-            Some(widths.iter().sum::<usize>() / widths.len())
+        if self.glyphs.is_empty() {
+            return None;
         }
+
+        let total: usize = self.glyphs.values().map(|g| g.width).sum();
+        Some(total / self.glyphs.len())
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
@@ -225,26 +217,12 @@ impl FigletFont {
             height: raw_lines.len(),
             parts,
         };
-        self.glyphs[ch as usize] = Some(glyph);
+        self.glyphs.insert(ch as char, glyph);
     }
 }
 
 impl FigletFont {
     pub fn has_char(&self, ch: char) -> bool {
-        (ch as u32) < 256 && self.glyphs[ch as usize].is_some()
-    }
-    pub fn render_char<T: FontTarget>(
-        &self,
-        target: &mut T,
-        ch: char,
-        mode: RenderMode,
-    ) -> Result<()> {
-        let Some(g) = (ch as u32 <= 255)
-            .then(|| self.glyphs[ch as usize].clone())
-            .flatten()
-        else {
-            return Err(FontError::UnknownChar(ch));
-        };
-        g.render(target, mode)
+        self.glyphs.contains_key(&ch)
     }
 }
