@@ -1,5 +1,5 @@
 use retrofont::{
-    tdf::{FontType, TdfFont},
+    tdf::{TdfFontType, TdfFont},
     test_support::BufferTarget,
     Font, Glyph, GlyphPart, RenderMode,
 };
@@ -14,7 +14,7 @@ fn lines_to_strings(buf: &BufferTarget) -> Vec<String> {
 
 #[test]
 fn tdf_round_trip_block_single_glyph() {
-    let mut font = TdfFont::new("TEST", FontType::Block, 0);
+    let mut font = TdfFont::new("TEST", TdfFontType::Block, 0);
     let glyph = Glyph {
         width: 4,
         height: 2,
@@ -32,7 +32,7 @@ fn tdf_round_trip_block_single_glyph() {
     assert_eq!(parsed.len(), 1);
     let p = &parsed[0];
     assert_eq!(p.name, "TEST");
-    assert_eq!(p.font_type(), FontType::Block);
+    assert_eq!(p.font_type(), TdfFontType::Block);
     // Validate via render
     let mut target = BufferTarget::new();
     Font::Tdf(p.clone())
@@ -44,7 +44,7 @@ fn tdf_round_trip_block_single_glyph() {
 
 #[test]
 fn tdf_round_trip_color_attributes() {
-    let mut font = TdfFont::new("COLOR", FontType::Color, 0);
+    let mut font = TdfFont::new("COLOR", TdfFontType::Color, 0);
     let glyph = Glyph {
         width: 3,
         height: 2,
@@ -79,7 +79,7 @@ fn tdf_round_trip_color_attributes() {
 
 #[test]
 fn tdf_render_block_multiline() {
-    let mut font = TdfFont::new("BLK", FontType::Block, 0);
+    let mut font = TdfFont::new("BLK", TdfFontType::Block, 0);
     let glyph = Glyph {
         width: 2,
         height: 2,
@@ -102,7 +102,7 @@ fn tdf_render_block_multiline() {
 
 #[test]
 fn tdf_render_ampersand_hidden_in_display_visible_in_edit() {
-    let mut font = TdfFont::new("AMP", FontType::Block, 0);
+    let mut font = TdfFont::new("AMP", TdfFontType::Block, 0);
     let glyph = Glyph {
         width: 3,
         height: 1,
@@ -129,7 +129,7 @@ fn tdf_render_ampersand_hidden_in_display_visible_in_edit() {
 
 #[test]
 fn tdf_bundle_multiple_fonts() {
-    let mut f1 = TdfFont::new("ONE", FontType::Block, 0);
+    let mut f1 = TdfFont::new("ONE", TdfFontType::Block, 0);
     f1.add_glyph(
         b'A',
         Glyph {
@@ -138,7 +138,7 @@ fn tdf_bundle_multiple_fonts() {
             parts: vec![GlyphPart::Char('A')],
         },
     );
-    let mut f2 = TdfFont::new("TWO", FontType::Color, 0);
+    let mut f2 = TdfFont::new("TWO", TdfFontType::Color, 0);
     f2.add_glyph(
         b'B',
         Glyph {
@@ -163,7 +163,7 @@ fn tdf_bundle_multiple_fonts() {
 
 #[test]
 fn tdf_render_color_attribute_nibbles() {
-    let mut font = TdfFont::new("COLR", FontType::Color, 0);
+    let mut font = TdfFont::new("COLR", TdfFontType::Color, 0);
     let glyph = Glyph {
         width: 3,
         height: 1,
@@ -201,7 +201,7 @@ fn tdf_render_color_attribute_nibbles() {
 
 #[test]
 fn tdf_outline_markers() {
-    let mut font = TdfFont::new("OUTL", FontType::Outline, 0);
+    let mut font = TdfFont::new("OUTL", TdfFontType::Outline, 0);
     let glyph = Glyph {
         width: 5,
         height: 1,
@@ -225,7 +225,7 @@ fn tdf_outline_markers() {
 
 #[test]
 fn tdf_edit_mode_preserves_markers() {
-    let mut font = TdfFont::new("EDITM", FontType::Outline, 0);
+    let mut font = TdfFont::new("EDITM", TdfFontType::Outline, 0);
     let glyph = Glyph {
         width: 3,
         height: 1,

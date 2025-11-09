@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use retrofont::{
-    convert::figlet_to_tdf,
+    convert::convert_to_tdf,
     figlet::FigletFont,
-    tdf::{FontType, TdfFont},
+    tdf::{TdfFontType, TdfFont},
     Font, RenderMode,
 };
 use std::fs;
@@ -75,19 +75,22 @@ fn main() -> Result<()> {
             let ansi = render_to_ansi(&font_enum, &text, mode)?;
             println!("{ansi}");
         }
+        
         Cmd::Convert { input, output, ty } => {
             let bytes = fs::read(&input)?;
             let fig = FigletFont::from_bytes(&bytes)?;
             let target_type = match ty.to_lowercase().as_str() {
-                "outline" => FontType::Outline,
-                "block" => FontType::Block,
-                "color" => FontType::Color,
-                _ => FontType::Color,
+                "outline" => TdfFontType::Outline,
+                "block" => TdfFontType::Block,
+                "color" => TdfFontType::Color,
+                _ => TdfFontType::Color,
             };
-            let _tdf = figlet_to_tdf(&fig, target_type)?;
+            let tdf = convert_to_tdf(&fig, target_type)?;
             // placeholder serialization (real TDF writer TBD)
-            fs::write(&output, b"TDF_PLACEHOLDER")?;
-            eprintln!("Converted FIGlet -> TDF ({target_type:?}) -> {output}");
+            match tdf.as_tdf_bytes() {
+                Ok(bytes) => fs::write(&output, bytes)?,
+                Err(e) => eprintln!("Failed to convert TDF font to bytes: {e}"),
+            }
         }
         Cmd::Inspect { font } => {
             let bytes = fs::read(&font)?;

@@ -1,11 +1,11 @@
 use retrofont::{
-    tdf::{FontType, TdfFont},
+    tdf::{TdfFontType, TdfFont},
     Glyph, GlyphPart,
 };
 
 #[test]
 fn inspect_bundle_creation() {
-    let mut f1 = TdfFont::new("Alpha", FontType::Block, 0);
+    let mut f1 = TdfFont::new("Alpha", TdfFontType::Block, 0);
     f1.add_glyph(
         b'A',
         Glyph {
@@ -23,7 +23,7 @@ fn inspect_bundle_creation() {
         },
     );
 
-    let mut f2 = TdfFont::new("Beta", FontType::Color, 0);
+    let mut f2 = TdfFont::new("Beta", TdfFontType::Color, 0);
     f2.add_glyph(
         b'X',
         Glyph {
@@ -64,7 +64,7 @@ fn inspect_bundle_creation() {
         },
     );
 
-    let mut f3 = TdfFont::new("Gamma", FontType::Outline, 0);
+    let mut f3 = TdfFont::new("Gamma", TdfFontType::Outline, 0);
     f3.add_glyph(
         b'1',
         Glyph {

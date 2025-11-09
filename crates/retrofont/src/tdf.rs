@@ -16,7 +16,7 @@ const FONT_NAME_LEN_MAX: usize = 16; // 12 + 4 nulls
 const CHAR_TABLE_SIZE: usize = 94; // printable  !..~ range
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum FontType {
+pub enum TdfFontType {
     Outline,
     Block,
     Color,
@@ -53,13 +53,13 @@ impl std::error::Error for TdfParseError {}
 #[derive(Clone)]
 pub struct TdfFont {
     pub name: String,
-    pub font_type: FontType,
+    pub font_type: TdfFontType,
     spacing: i32,
     glyphs: Vec<Option<Glyph>>, // full 256 for convenience, but TDF maps subset
 }
 
 impl TdfFont {
-    pub fn new(name: impl Into<String>, font_type: FontType, spacing: i32) -> Self {
+    pub fn new(name: impl Into<String>, font_type: TdfFontType, spacing: i32) -> Self {
         Self {
             name: name.into(),
             font_type,
@@ -142,9 +142,9 @@ impl TdfFont {
                 return Err(FontError::Parse("tdf: truncated font type".into()));
             }
             let font_type = match bytes[o] {
-                0 => FontType::Outline,
-                1 => FontType::Block,
-                2 => FontType::Color,
+                0 => TdfFontType::Outline,
+                1 => TdfFontType::Block,
+                2 => TdfFontType::Color,
                 other => return Err(FontError::Parse(format!("tdf: unsupported type {}", other))),
             };
             o += 1;
@@ -210,7 +210,7 @@ impl TdfFont {
                         continue;
                     }
                     match font_type {
-                        FontType::Color => {
+                        TdfFontType::Color => {
                             if glyph_offset >= bytes.len() {
                                 break;
                             }
@@ -232,7 +232,7 @@ impl TdfFont {
                                 });
                             }
                         }
-                        FontType::Block => {
+                        TdfFontType::Block => {
                             if ch == 0xFF {
                                 parts.push(GlyphPart::HardBlank);
                             } else {
@@ -241,7 +241,7 @@ impl TdfFont {
                                 ));
                             }
                         }
-                        FontType::Outline => {
+                        TdfFontType::Outline => {
                             if ch == b'@' {
                                 parts.push(GlyphPart::FillMarker);
                             } else if ch == b'O' {
@@ -314,9 +314,9 @@ impl TdfFont {
         out.extend(vec![0; FONT_NAME_LEN - self.name.len()]);
         out.extend([0, 0, 0, 0]);
         let type_byte = match self.font_type {
-            FontType::Outline => 0,
-            FontType::Block => 1,
-            FontType::Color => 2,
+            TdfFontType::Outline => 0,
+            TdfFontType::Block => 1,
+            TdfFontType::Color => 2,
         };
         out.push(type_byte);
         out.push(self.spacing as u8);
@@ -365,7 +365,7 @@ impl TdfFont {
 }
 
 impl TdfFont {
-    pub fn font_type(&self) -> FontType {
+    pub fn font_type(&self) -> TdfFontType {
         self.font_type
     }
 

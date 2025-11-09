@@ -82,19 +82,6 @@ impl Font {
         }
     }
 
-    pub fn render_str<T: FontTarget>(
-        &self,
-        target: &mut T,
-        text: &str,
-        mode: RenderMode,
-    ) -> Result<()> {
-        for ch in text.chars() {
-            self.render_char(target, ch, mode)?;
-            target.next_line().map_err(|_| FontError::InvalidGlyph)?;
-        }
-        Ok(())
-    }
-
     /// Load fonts from raw bytes, attempting FIGlet first (header check) then TDF.
     ///
     /// Returns a vector containing:
