@@ -55,23 +55,41 @@ impl ConsoleRenderer {
             }
             for cell in line {
                 let ch = cell.ch;
+
+                // Build ANSI escape sequence
+                let mut escape = String::new();
+                let mut has_escape = false;
+
+                // Add blink if needed
+                if cell.blink {
+                    escape.push_str("\x1B[5m");
+                    has_escape = true;
+                }
+
+                // Add colors
                 match (cell.fg, cell.bg) {
                     (None, None) => {
+                        if has_escape {
+                            out.push_str(&escape);
+                        }
                         out.push(ch);
                     }
                     (Some(fg), Some(bg)) => {
                         let (fr, fg_g, fb) = DOS_PALETTE[fg as usize % 16];
                         let (br, bg_g, bb) = DOS_PALETTE[bg as usize % 16];
+                        out.push_str(&escape);
                         out.push_str(&format!(
                             "\x1B[38;2;{};{};{}m\x1B[48;2;{};{};{}m{}",
                             fr, fg_g, fb, br, bg_g, bb, ch
                         ));
                     }
                     (Some(fg), None) => {
+                        out.push_str(&escape);
                         let (r, g, b) = DOS_PALETTE[fg as usize % 16];
                         out.push_str(&format!("\x1B[38;2;{};{};{}m{}", r, g, b, ch));
                     }
                     (None, Some(bg)) => {
+                        out.push_str(&escape);
                         let (r, g, b) = DOS_PALETTE[bg as usize % 16];
                         out.push_str(&format!("\x1B[48;2;{};{};{}m{}", r, g, b, ch));
                     }
