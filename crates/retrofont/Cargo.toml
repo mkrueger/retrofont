@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Mike Krüger <mkrueger@posteo.de>"]
 license = "MIT OR Apache-2.0"
 description = "Retro terminal font toolkit: TDF/FIGlet parsing, rendering, conversion."
-repository = "https://github.com/mkrueger/icy_tools"
+repository = "https://github.com/mkrueger/retrofont"
 
 [features]
 default = ["tdf", "figlet", "convert"]

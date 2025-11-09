@@ -4,14 +4,18 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Mike Krüger <mkrueger@posteo.de>"]
 license = "MIT OR Apache-2.0"
-description = "CLI for retrofont: render / convert / inspect"
-repository = "https://github.com/mkrueger/icy_tools"
+description = "CLI for retrofont: Render and convert retro ASCII/ANSI art fonts"
+repository = "https://github.com/mkrueger/retrofont"
 
 [[bin]]
 name = "retrofont"
 path = "src/main.rs"
 
 [dependencies]
-retrofont = { path = "../retrofont", features = ["tdf", "figlet", "convert"] }
-clap = { version = "4", features = ["derive"] }
-anyhow = "1"
+retrofont = { version = "0.1.0", path = "../retrofont" }  # <-- Add version here
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
