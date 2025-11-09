@@ -1,4 +1,4 @@
-use retrofont::{tdf::TdfFont, Font, FontType};
+use retrofont::tdf::{FontType, TdfFont};
 
 const TEST_FONT: &[u8] = include_bytes!("CODERX.TDF");
 
@@ -9,12 +9,12 @@ fn test_load_bundle() {
     for f in &fonts {
         assert_eq!(f.font_type(), FontType::Color);
     }
-    assert_eq!(fonts[0].name(), "Coder Blue");
-    assert_eq!(fonts[1].name(), "Coder Green");
-    assert_eq!(fonts[2].name(), "Coder Margen");
-    assert_eq!(fonts[3].name(), "Coder Purple");
-    assert_eq!(fonts[4].name(), "Coder Red");
-    assert_eq!(fonts[5].name(), "Coder Silver");
+    assert_eq!(fonts[0].name, "Coder Blue");
+    assert_eq!(fonts[1].name, "Coder Green");
+    assert_eq!(fonts[2].name, "Coder Margen");
+    assert_eq!(fonts[3].name, "Coder Purple");
+    assert_eq!(fonts[4].name, "Coder Red");
+    assert_eq!(fonts[5].name, "Coder Silver");
 }
 
 #[test]
@@ -24,6 +24,6 @@ fn test_save_and_reload_bundle() {
     let parsed = TdfFont::from_bytes(&bundle).unwrap();
     assert_eq!(parsed.len(), 6);
     for (a, b) in fonts.iter().zip(parsed.iter()) {
-        assert_eq!(a.name(), b.name());
+        assert_eq!(a.name, b.name);
     }
 }

@@ -1,4 +1,7 @@
-use retrofont::{tdf::TdfFont, FontType, Glyph, GlyphPart};
+use retrofont::{
+    tdf::{FontType, TdfFont},
+    Glyph, GlyphPart,
+};
 
 #[test]
 fn inspect_bundle_creation() {
@@ -9,7 +12,6 @@ fn inspect_bundle_creation() {
             width: 1,
             height: 1,
             parts: vec![GlyphPart::Char('A')],
-            font_type: FontType::Block,
         },
     );
     f1.add_glyph(
@@ -18,7 +20,6 @@ fn inspect_bundle_creation() {
             width: 1,
             height: 1,
             parts: vec![GlyphPart::Char('B')],
-            font_type: FontType::Block,
         },
     );
 
@@ -33,7 +34,6 @@ fn inspect_bundle_creation() {
                 fg: 0xF,
                 bg: 0x0,
             }],
-            font_type: FontType::Color,
         },
     );
     f2.add_glyph(
@@ -46,7 +46,6 @@ fn inspect_bundle_creation() {
                 fg: 0xF,
                 bg: 0x0,
             }],
-            font_type: FontType::Color,
         },
     );
     f2.add_glyph(
@@ -59,7 +58,6 @@ fn inspect_bundle_creation() {
                 fg: 0xF,
                 bg: 0x0,
             }],
-            font_type: FontType::Color,
         },
     );
 
@@ -70,7 +68,6 @@ fn inspect_bundle_creation() {
             width: 1,
             height: 1,
             parts: vec![GlyphPart::OutlinePlaceholder(b'A')],
-            font_type: FontType::Outline,
         },
     );
 

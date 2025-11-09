@@ -1,15 +1,16 @@
 //! FIGlet font placeholder.
 use crate::{
     error::{FontError, Result},
-    glyph::{FontType, Glyph, GlyphPart, RenderMode},
-    Font, FontTarget,
+    glyph::{Glyph, GlyphPart, RenderMode},
+    FontTarget,
 };
 use std::io::{Cursor, Read};
 use std::{fs, path::Path};
 use zip::ZipArchive;
 
+#[derive(Clone)]
 pub struct FigletFont {
-    name: String,
+    pub name: String,
     header: String,
     comments: Vec<String>,
     pub(crate) glyphs: Vec<Option<Glyph>>,
@@ -23,6 +24,19 @@ impl FigletFont {
             comments: Vec::new(),
             glyphs: vec![None; 256],
         }
+    }
+
+    /// Safe access to a glyph by byte code (0-255).
+    pub fn glyph(&self, ch: u8) -> Option<&Glyph> {
+        self.glyphs.get(ch as usize).and_then(|g| g.as_ref())
+    }
+
+    /// Iterate over all defined FIGlet glyphs as (char, &Glyph).
+    pub fn iter_glyphs(&self) -> impl Iterator<Item = (char, &Glyph)> {
+        self.glyphs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, g)| g.as_ref().map(|glyph| (i as u8 as char, glyph)))
     }
 
     pub fn load(path: &Path) -> Result<Self> {
@@ -166,43 +180,37 @@ impl FigletFont {
     }
 
     pub fn add_raw_char(&mut self, ch: u8, raw_lines: &[&str]) {
-        let mut data = Vec::new();
-        for (i, line) in raw_lines.iter().enumerate() {
-            if i > 0 {
-                data.push(b'\n');
-            }
-            data.extend(line.bytes());
-        }
+        // Build parts with proper NewLine separators & compute width/height in one pass.
         let mut parts = Vec::new();
-        for (i, line) in raw_lines.iter().enumerate() {
-            if i > 0 {
+        let mut max_width = 0usize;
+        for (row, line) in raw_lines.iter().enumerate() {
+            if row > 0 {
                 parts.push(GlyphPart::NewLine);
             }
+            max_width = max_width.max(line.len());
             for ch in line.chars() {
                 parts.push(GlyphPart::Char(ch));
             }
         }
         let glyph = Glyph {
-            width: raw_lines.iter().map(|l| l.len()).max().unwrap_or(0),
+            width: max_width,
             height: raw_lines.len(),
             parts,
-            font_type: FontType::Figlet,
         };
         self.glyphs[ch as usize] = Some(glyph);
     }
 }
 
-impl Font for FigletFont {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn font_type(&self) -> FontType {
-        FontType::Figlet
-    }
-    fn has_char(&self, ch: char) -> bool {
+impl FigletFont {
+    pub fn has_char(&self, ch: char) -> bool {
         (ch as u32) < 256 && self.glyphs[ch as usize].is_some()
     }
-    fn render_char<T: FontTarget>(&self, target: &mut T, ch: char, mode: RenderMode) -> Result<()> {
+    pub fn render_char<T: FontTarget>(
+        &self,
+        target: &mut T,
+        ch: char,
+        mode: RenderMode,
+    ) -> Result<()> {
         let Some(g) = (ch as u32 <= 255)
             .then(|| self.glyphs[ch as usize].clone())
             .flatten()

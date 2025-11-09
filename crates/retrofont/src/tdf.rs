@@ -1,8 +1,8 @@
 //! TDF font support (placeholder implementation)
 use crate::{
     error::{FontError, Result},
-    glyph::{FontType, Glyph, GlyphPart, RenderMode},
-    Font, FontTarget,
+    glyph::{Glyph, GlyphPart, RenderMode},
+    FontTarget,
 };
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -14,6 +14,13 @@ const FONT_INDICATOR: u32 = 0xFF00_AA55;
 const FONT_NAME_LEN: usize = 12;
 const FONT_NAME_LEN_MAX: usize = 16; // 12 + 4 nulls
 const CHAR_TABLE_SIZE: usize = 94; // printable  !..~ range
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum FontType {
+    Outline,
+    Block,
+    Color,
+}
 
 #[derive(Debug)]
 pub enum TdfParseError {
@@ -43,9 +50,10 @@ impl std::fmt::Display for TdfParseError {
 
 impl std::error::Error for TdfParseError {}
 
+#[derive(Clone)]
 pub struct TdfFont {
-    name: String,
-    font_type: FontType,
+    pub name: String,
+    pub font_type: FontType,
     spacing: i32,
     glyphs: Vec<Option<Glyph>>, // full 256 for convenience, but TDF maps subset
 }
@@ -59,6 +67,7 @@ impl TdfFont {
             glyphs: vec![None; 256],
         }
     }
+
     pub fn add_glyph(&mut self, ch: u8, glyph: Glyph) {
         if (ch as usize) < 256 {
             self.glyphs[ch as usize] = Some(glyph);
@@ -130,7 +139,6 @@ impl TdfFont {
                 0 => FontType::Outline,
                 1 => FontType::Block,
                 2 => FontType::Color,
-                3 => FontType::Figlet,
                 other => return Err(FontError::Parse(format!("tdf: unsupported type {}", other))),
             };
             o += 1;
@@ -235,16 +243,12 @@ impl TdfFont {
                                 ));
                             }
                         }
-                        FontType::Figlet => {
-                            parts.push(GlyphPart::Char(crate::tdf::CP437_TO_UNICODE[ch as usize]));
-                        }
                     }
                 }
                 let glyph = Glyph {
                     width,
                     height,
                     parts,
-                    font_type,
                 };
                 font.glyphs[b' ' as usize + 1 + i] = Some(glyph); // map printable range starting at space+1
             }
@@ -252,6 +256,15 @@ impl TdfFont {
             fonts.push(font);
         }
         Ok(fonts)
+    }
+
+    /// Iterate over all defined glyphs, yielding (char, &Glyph).
+    /// Skips empty slots. Only characters with code < 256 are considered.
+    pub fn iter_glyphs(&self) -> impl Iterator<Item = (char, &Glyph)> {
+        self.glyphs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, g)| g.as_ref().map(|glyph| (i as u8 as char, glyph)))
     }
 
     pub fn as_tdf_bytes(&self) -> Result<Vec<u8>> {
@@ -291,7 +304,6 @@ impl TdfFont {
             FontType::Outline => 0,
             FontType::Block => 1,
             FontType::Color => 2,
-            FontType::Figlet => 3,
         };
         out.push(type_byte);
         out.push(self.spacing as u8);
@@ -335,17 +347,19 @@ impl TdfFont {
     }
 }
 
-impl Font for TdfFont {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn font_type(&self) -> FontType {
+impl TdfFont {
+    pub fn font_type(&self) -> FontType {
         self.font_type
     }
-    fn has_char(&self, ch: char) -> bool {
+    pub fn has_char(&self, ch: char) -> bool {
         (ch as u32) < 256 && self.glyphs[ch as usize].is_some()
     }
-    fn render_char<T: FontTarget>(&self, target: &mut T, ch: char, mode: RenderMode) -> Result<()> {
+    pub fn render_char<T: FontTarget>(
+        &self,
+        target: &mut T,
+        ch: char,
+        mode: RenderMode,
+    ) -> Result<()> {
         let Some(g) = (ch as u32 <= 255)
             .then(|| self.glyphs[ch as usize].clone())
             .flatten()

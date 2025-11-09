@@ -1,7 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use retrofont::{
-    convert::figlet_to_tdf, figlet::FigletFont, tdf::TdfFont, Font, FontType, RenderMode,
+    convert::figlet_to_tdf,
+    figlet::FigletFont,
+    tdf::{FontType, TdfFont},
+    Font, RenderMode,
 };
 use std::fs;
 
@@ -59,17 +62,17 @@ fn main() -> Result<()> {
                 RenderMode::Display
             };
             // crude format detection
-            let ansi = if font.ends_with(".flf") {
-                let f = FigletFont::from_bytes(&bytes)?;
-                render_to_ansi(&f, &text, mode)?
+            let font_enum = if font.ends_with(".flf") {
+                Font::Figlet(FigletFont::from_bytes(&bytes)?)
             } else {
-                let fonts = TdfFont::from_bytes(&bytes)?; // bundle may contain multiple; take first
-                let f = fonts
-                    .into_iter()
+                let mut fonts = TdfFont::from_bytes(&bytes)?;
+                let first = fonts
+                    .drain(..)
                     .next()
                     .ok_or_else(|| anyhow::anyhow!("no font in file"))?;
-                render_to_ansi(&f, &text, mode)?
+                Font::Tdf(first)
             };
+            let ansi = render_to_ansi(&font_enum, &text, mode)?;
             println!("{ansi}");
         }
         Cmd::Convert { input, output, ty } => {
@@ -90,7 +93,7 @@ fn main() -> Result<()> {
             let bytes = fs::read(&font)?;
             if font.ends_with(".flf") {
                 let f = FigletFont::from_bytes(&bytes)?;
-                println!("FIGlet font: {}", f.name());
+                println!("FIGlet font: {}", f.name);
                 println!("  Defined characters: {}", f.glyph_count());
             } else {
                 let fonts = TdfFont::from_bytes(&bytes)?;
@@ -100,9 +103,9 @@ fn main() -> Result<()> {
                 }
                 for (idx, f) in fonts.iter().enumerate() {
                     if font_count > 1 {
-                        println!("\nFont #{}: {} ({:?})", idx + 1, f.name(), f.font_type());
+                        println!("\nFont #{}: {} ({:?})", idx + 1, f.name, f.font_type());
                     } else {
-                        println!("TDF font: {} ({:?})", f.name(), f.font_type());
+                        println!("TDF font: {} ({:?})", f.name, f.font_type());
                     }
                     println!("  Defined characters: {}", f.char_count());
                 }

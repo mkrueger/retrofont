@@ -9,7 +9,7 @@ mod glyph;
 pub mod tdf;
 pub use error::{FontError, Result};
 pub use font::Font;
-pub use glyph::{FontType, Glyph, GlyphPart, RenderMode};
+pub use glyph::{Glyph, GlyphPart, RenderMode};
 
 // Test utilities
 pub mod test_support;

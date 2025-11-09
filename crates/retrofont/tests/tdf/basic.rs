@@ -1,5 +1,7 @@
 use retrofont::{
-    tdf::TdfFont, test_support::BufferTarget, Font, FontType, Glyph, GlyphPart, RenderMode,
+    tdf::{FontType, TdfFont},
+    test_support::BufferTarget,
+    Font, Glyph, GlyphPart, RenderMode,
 };
 
 // Helper: collect rendered lines into Vec<String>
@@ -23,18 +25,18 @@ fn tdf_round_trip_block_single_glyph() {
             GlyphPart::Char('C'),
             GlyphPart::Char('D'),
         ],
-        font_type: FontType::Block,
     };
     font.add_glyph(b'A', glyph);
     let bytes = font.as_tdf_bytes().expect("serialize");
     let parsed = TdfFont::from_bytes(&bytes).expect("parse");
     assert_eq!(parsed.len(), 1);
     let p = &parsed[0];
-    assert_eq!(p.name(), "TEST");
+    assert_eq!(p.name, "TEST");
     assert_eq!(p.font_type(), FontType::Block);
     // Validate via render
     let mut target = BufferTarget::new();
-    p.render_char(&mut target, 'A', RenderMode::Display)
+    Font::Tdf(p.clone())
+        .render_char(&mut target, 'A', RenderMode::Display)
         .unwrap();
     let lines = lines_to_strings(&target);
     assert_eq!(lines, vec!["AB", "CD"]);
@@ -60,7 +62,6 @@ fn tdf_round_trip_color_attributes() {
                 bg: 0xF,
             },
         ],
-        font_type: FontType::Color,
     };
     font.add_glyph(b'Z', glyph);
     let bytes = font.as_tdf_bytes().unwrap();
@@ -68,7 +69,7 @@ fn tdf_round_trip_color_attributes() {
     assert_eq!(parsed.len(), 1);
     // Validate via render
     let mut target = BufferTarget::new();
-    parsed[0]
+    Font::Tdf(parsed[0].clone())
         .render_char(&mut target, 'Z', RenderMode::Display)
         .unwrap();
     assert!(lines_to_strings(&target).len() > 0);
@@ -87,11 +88,11 @@ fn tdf_render_block_multiline() {
             GlyphPart::Char('Z'),
             GlyphPart::Char('W'),
         ],
-        font_type: FontType::Block,
     };
     font.add_glyph(b'X', glyph);
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'X', RenderMode::Display)
+    Font::Tdf(font.clone())
+        .render_char(&mut target, 'X', RenderMode::Display)
         .unwrap();
     let lines = lines_to_strings(&target);
     assert_eq!(lines, vec!["XY", "ZW"]);
@@ -108,17 +109,18 @@ fn tdf_render_ampersand_hidden_in_display_visible_in_edit() {
             GlyphPart::Char('B'),
             GlyphPart::EndMarker,
         ],
-        font_type: FontType::Block,
     };
     font.add_glyph(b'A', glyph);
     // Display mode: & suppressed
     let mut d_target = BufferTarget::new();
-    font.render_char(&mut d_target, 'A', RenderMode::Display)
+    Font::Tdf(font.clone())
+        .render_char(&mut d_target, 'A', RenderMode::Display)
         .unwrap();
     assert_eq!(lines_to_strings(&d_target), vec!["AB"]);
     // Edit mode: & present
     let mut e_target = BufferTarget::new();
-    font.render_char(&mut e_target, 'A', RenderMode::Edit)
+    Font::Tdf(font)
+        .render_char(&mut e_target, 'A', RenderMode::Edit)
         .unwrap();
     assert_eq!(lines_to_strings(&e_target), vec!["AB&"]);
 }
@@ -132,7 +134,6 @@ fn tdf_bundle_multiple_fonts() {
             width: 1,
             height: 1,
             parts: vec![GlyphPart::Char('A')],
-            font_type: FontType::Block,
         },
     );
     let mut f2 = TdfFont::new("TWO", FontType::Color, 0);
@@ -146,14 +147,13 @@ fn tdf_bundle_multiple_fonts() {
                 fg: 0x1,
                 bg: 0xF,
             }],
-            font_type: FontType::Color,
         },
     );
     let bundle = TdfFont::create_bundle(&[f1, f2]).unwrap();
     let parsed = TdfFont::from_bytes(&bundle).unwrap();
     assert_eq!(parsed.len(), 2);
-    assert_eq!(parsed[0].name(), "ONE");
-    assert_eq!(parsed[1].name(), "TWO");
+    assert_eq!(parsed[0].name, "ONE");
+    assert_eq!(parsed[1].name, "TWO");
     assert_eq!(parsed[0].char_count(), 1);
     assert_eq!(parsed[1].char_count(), 1);
 }
@@ -181,7 +181,6 @@ fn tdf_render_color_attribute_nibbles() {
                 bg: 0xC,
             },
         ],
-        font_type: FontType::Color,
     };
     font.add_glyph(b'C', glyph);
     let mut target = BufferTarget::new();
@@ -207,7 +206,6 @@ fn tdf_outline_markers() {
             GlyphPart::OutlinePlaceholder(b'A'),
             GlyphPart::OutlinePlaceholder(b'B'),
         ],
-        font_type: FontType::Outline,
     };
     font.add_glyph(b'A', glyph);
     let mut target = BufferTarget::new();
@@ -230,7 +228,6 @@ fn tdf_edit_mode_preserves_markers() {
             GlyphPart::OutlineHole,
             GlyphPart::EndMarker,
         ],
-        font_type: FontType::Outline,
     };
     font.add_glyph(b'E', glyph);
     let mut target = BufferTarget::new();

@@ -1,5 +1,7 @@
 use retrofont::{
-    tdf::TdfFont, test_support::BufferTarget, Font, FontType, Glyph, GlyphPart, RenderMode,
+    tdf::{FontType, TdfFont},
+    test_support::BufferTarget,
+    Font, Glyph, GlyphPart, RenderMode,
 };
 
 fn lines(buf: &BufferTarget) -> Vec<String> {
@@ -22,18 +24,18 @@ fn tdf_round_trip_block_single_glyph() {
             GlyphPart::Char('C'),
             GlyphPart::Char('D'),
         ],
-        font_type: FontType::Block,
     };
     font.add_glyph(b'A', glyph.clone());
     let bytes = font.as_tdf_bytes().expect("serialize");
     let parsed = TdfFont::from_bytes(&bytes).expect("parse");
     assert_eq!(parsed.len(), 1);
     let p = &parsed[0];
-    assert_eq!(p.name(), "TEST");
+    assert_eq!(p.name, "TEST");
     assert_eq!(p.font_type(), FontType::Block);
     // Validate via render
     let mut target = BufferTarget::new();
-    p.render_char(&mut target, 'A', RenderMode::Display)
+    Font::Tdf(p.clone())
+        .render_char(&mut target, 'A', RenderMode::Display)
         .unwrap();
     let line0: String = target.lines[0].iter().map(|c| c.ch).collect();
     assert_eq!(line0, "AB");
@@ -61,13 +63,12 @@ fn tdf_round_trip_color_attributes() {
                 bg: 0xF,
             },
         ],
-        font_type: FontType::Color,
     };
     font.add_glyph(b'Z', glyph.clone());
     let bytes = font.as_tdf_bytes().unwrap();
     let parsed = TdfFont::from_bytes(&bytes).unwrap();
     let mut target = BufferTarget::new();
-    parsed[0]
+    Font::Tdf(parsed[0].clone())
         .render_char(&mut target, 'Z', RenderMode::Edit)
         .unwrap();
     // Expect only 'A' then newline then 'B' because '&' suppressed in display and edit currently for Color
@@ -92,11 +93,11 @@ fn tdf_render_block_multiline() {
                 GlyphPart::Char('Z'),
                 GlyphPart::Char('W'),
             ],
-            font_type: FontType::Block,
         },
     );
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'X', RenderMode::Display)
+    Font::Tdf(font.clone())
+        .render_char(&mut target, 'X', RenderMode::Display)
         .unwrap();
     assert_eq!(lines(&target), vec!["XY", "ZW"]);
 }
@@ -114,14 +115,17 @@ fn tdf_ampersand_hidden_display_visible_edit() {
                 GlyphPart::Char('B'),
                 GlyphPart::EndMarker,
             ],
-            font_type: FontType::Block,
         },
     );
     let mut d = BufferTarget::new();
-    font.render_char(&mut d, 'A', RenderMode::Display).unwrap();
+    Font::Tdf(font.clone())
+        .render_char(&mut d, 'A', RenderMode::Display)
+        .unwrap();
     assert_eq!(lines(&d), vec!["AB"]);
     let mut e = BufferTarget::new();
-    font.render_char(&mut e, 'A', RenderMode::Edit).unwrap();
+    Font::Tdf(font)
+        .render_char(&mut e, 'A', RenderMode::Edit)
+        .unwrap();
     assert_eq!(lines(&e), vec!["AB&"]);
 }
 
@@ -134,7 +138,6 @@ fn tdf_bundle_multiple_fonts() {
             width: 1,
             height: 1,
             parts: vec![GlyphPart::Char('A')],
-            font_type: FontType::Block,
         },
     );
     let mut f2 = TdfFont::new("TWO", FontType::Color, 0);
@@ -148,7 +151,6 @@ fn tdf_bundle_multiple_fonts() {
                 fg: 0x1,
                 bg: 0xF,
             }],
-            font_type: FontType::Color,
         },
     );
     let bundle = TdfFont::create_bundle(&[f1, f2]).unwrap();
@@ -158,8 +160,8 @@ fn tdf_bundle_multiple_fonts() {
 
     let parsed = TdfFont::from_bytes(&bundle).unwrap();
     assert_eq!(parsed.len(), 2);
-    assert_eq!(parsed[0].name(), "ONE");
-    assert_eq!(parsed[1].name(), "TWO");
+    assert_eq!(parsed[0].name, "ONE");
+    assert_eq!(parsed[1].name, "TWO");
 }
 
 #[test]
@@ -187,11 +189,11 @@ fn tdf_render_color_attribute_nibbles() {
                     bg: 0xC,
                 },
             ],
-            font_type: FontType::Color,
         },
     );
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'C', RenderMode::Display)
+    Font::Tdf(font.clone())
+        .render_char(&mut target, 'C', RenderMode::Display)
         .unwrap();
     let line = lines(&target)[0].clone();
     assert_eq!(line, "A B");
@@ -213,11 +215,11 @@ fn tdf_edit_mode_preserves_markers() {
                 GlyphPart::OutlineHole,
                 GlyphPart::EndMarker,
             ],
-            font_type: FontType::Outline,
         },
     );
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'E', RenderMode::Edit)
+    Font::Tdf(font.clone())
+        .render_char(&mut target, 'E', RenderMode::Edit)
         .unwrap();
     // Edit mode shows special markers: '@' for FillMarker, 'O' for OutlineHole, '&' for EndMarker
     assert_eq!(lines(&target)[0], "@O&");
@@ -238,11 +240,11 @@ fn tdf_outline_uses_unicode_box_chars() {
                 GlyphPart::OutlinePlaceholder(b'B'),
                 GlyphPart::OutlinePlaceholder(b'C'),
             ],
-            font_type: FontType::Outline,
         },
     );
     let mut target = BufferTarget::new();
-    font.render_char(&mut target, 'U', RenderMode::Display)
+    Font::Tdf(font)
+        .render_char(&mut target, 'U', RenderMode::Display)
         .unwrap();
     assert_eq!(lines(&target)[0], "──│");
 }

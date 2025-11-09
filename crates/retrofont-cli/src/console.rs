@@ -60,7 +60,7 @@ impl FontTarget for ConsoleRenderer {
 }
 
 /// Convenience: render text into an ANSI colored String.
-pub fn render_to_ansi<F: Font>(font: &F, text: &str, style: RenderMode) -> Result<String> {
+pub fn render_to_ansi(font: &Font, text: &str, style: RenderMode) -> Result<String> {
     let mut renderer = ConsoleRenderer::new();
     font.render_str(&mut renderer, text, style)?;
     Ok(renderer.into_ansi_string())
