@@ -1,0 +1,23 @@
+[package]
+name = "retrofont"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mike Krüger <mkrueger@posteo.de>"]
+license = "MIT OR Apache-2.0"
+description = "Retro terminal font toolkit: TDF/FIGlet parsing, rendering, conversion."
+repository = "https://github.com/mkrueger/icy_tools"
+
+[features]
+default = ["tdf", "figlet", "convert"]
+tdf = []
+figlet = []
+convert = ["tdf", "figlet"]
+color = []
+
+[dependencies]
+thiserror = "2.0.17"
+zip = "6.0.0"
+once_cell = "1.19"
+
+[dev-dependencies]
+pretty_assertions = "1"
