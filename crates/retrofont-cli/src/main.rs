@@ -56,6 +56,13 @@ enum Cmd {
         outline: usize,
         #[arg(long)]
         edit: bool,
+        #[arg(
+            short,
+            long,
+            default_value = "1",
+            help = "Font number in TDF bundle (1-based). Use 'inspect' to see available fonts."
+        )]
+        num: usize,
     },
     /// Convert FIGlet (.flf) to TDF
     Convert {
@@ -65,6 +72,13 @@ enum Cmd {
         output: String,
         #[arg(long, default_value = "color")]
         ty: String,
+        #[arg(
+            short,
+            long,
+            default_value = "1",
+            help = "Font number in TDF bundle to convert (1-based). Use 'inspect' to see available fonts."
+        )]
+        num: usize,
     },
     /// Inspect font metadata
     Inspect {
@@ -81,6 +95,7 @@ fn main() -> Result<()> {
             text,
             edit,
             outline,
+            num,
             ..
         } => {
             // Extra defensive check (in case future changes bypass clap range)
@@ -92,6 +107,10 @@ fn main() -> Result<()> {
                 );
             }
 
+            if num == 0 {
+                anyhow::bail!("Font number must be 1 or greater (1-based index)");
+            }
+
             let bytes = fs::read(&font)?;
             let mut mode = if edit {
                 RenderOptions::edit()
@@ -101,21 +120,50 @@ fn main() -> Result<()> {
             mode.outline_style = outline;
             // crude format detection
             let font_enum = if font.ends_with(".flf") {
+                if num > 1 {
+                    anyhow::bail!("FIGlet files contain only one font, --num must be 1");
+                }
                 Font::Figlet(FigletFont::load(&bytes)?)
             } else {
-                let mut fonts = TdfFont::load(&bytes)?;
-                let first = fonts
-                    .drain(..)
-                    .next()
-                    .ok_or_else(|| anyhow::anyhow!("no font in file"))?;
-                Font::Tdf(first)
+                let fonts = TdfFont::load(&bytes)?;
+                let font_count = fonts.len();
+                if font_count == 0 {
+                    anyhow::bail!("No fonts found in TDF file");
+                }
+                if num > font_count {
+                    anyhow::bail!(
+                        "Font #{} does not exist. TDF bundle contains {} font(s). Use 'inspect' to list available fonts.",
+                        num,
+                        font_count
+                    );
+                }
+                Font::Tdf(fonts.into_iter().nth(num - 1).unwrap())
             };
             let ansi = render_to_ansi(&font_enum, &text, &mode)?;
             println!("{ansi}");
         }
 
-        Cmd::Convert { input, output, ty } => {
+        Cmd::Convert {
+            input,
+            output,
+            ty,
+            num,
+        } => {
+            if num == 0 {
+                anyhow::bail!("Font number must be 1 or greater (1-based index)");
+            }
+
             let bytes = fs::read(&input)?;
+
+            // Currently only FIGlet to TDF conversion is supported
+            if !input.ends_with(".flf") {
+                anyhow::bail!("Convert currently only supports FIGlet (.flf) input files");
+            }
+
+            if num > 1 {
+                anyhow::bail!("FIGlet files contain only one font, --num must be 1");
+            }
+
             let fig = FigletFont::load(&bytes)?;
             let target_type = match ty.to_lowercase().as_str() {
                 "outline" => TdfFontType::Outline,
