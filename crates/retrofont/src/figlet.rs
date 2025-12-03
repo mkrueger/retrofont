@@ -41,7 +41,7 @@ impl FigletFont {
     pub fn load_file(path: &Path) -> Result<Self> {
         let bytes =
             fs::read(path).map_err(|e| FontError::Parse(format!("figlet read error: {e}")))?;
-        Self::from_bytes(&bytes)
+        Self::load(&bytes)
     }
 
     pub fn glyph_count(&self) -> usize {
@@ -59,7 +59,7 @@ impl FigletFont {
         Some(total / self.glyphs.len())
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    pub fn load(bytes: &[u8]) -> Result<Self> {
         let data = bytes;
         // Detect gzip signature (1F 8B) and decompress via zip crate fallback if possible.
         if bytes.len() >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B {

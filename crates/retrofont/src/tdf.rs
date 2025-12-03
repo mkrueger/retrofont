@@ -85,7 +85,7 @@ impl TdfFont {
         Some(self.spacing.max(1) as usize)
     }
 
-    pub fn load_bundle_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
+    pub fn load(bytes: &[u8]) -> Result<Vec<Self>> {
         // Parse one or multiple fonts from bundle
         if bytes.len() < 20 {
             return Err(FontError::Parse("tdf: file too short".into()));

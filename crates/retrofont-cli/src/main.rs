@@ -101,9 +101,9 @@ fn main() -> Result<()> {
             mode.outline_style = outline;
             // crude format detection
             let font_enum = if font.ends_with(".flf") {
-                Font::Figlet(FigletFont::from_bytes(&bytes)?)
+                Font::Figlet(FigletFont::load(&bytes)?)
             } else {
-                let mut fonts = TdfFont::load_bundle_bytes(&bytes)?;
+                let mut fonts = TdfFont::load(&bytes)?;
                 let first = fonts
                     .drain(..)
                     .next()
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
 
         Cmd::Convert { input, output, ty } => {
             let bytes = fs::read(&input)?;
-            let fig = FigletFont::from_bytes(&bytes)?;
+            let fig = FigletFont::load(&bytes)?;
             let target_type = match ty.to_lowercase().as_str() {
                 "outline" => TdfFontType::Outline,
                 "block" => TdfFontType::Block,
@@ -133,11 +133,11 @@ fn main() -> Result<()> {
         Cmd::Inspect { font } => {
             let bytes = fs::read(&font)?;
             if font.ends_with(".flf") {
-                let f = FigletFont::from_bytes(&bytes)?;
+                let f = FigletFont::load(&bytes)?;
                 println!("FIGlet font: {}", f.name);
                 println!("  Defined characters: {}", f.glyph_count());
             } else {
-                let fonts = TdfFont::load_bundle_bytes(&bytes)?;
+                let fonts = TdfFont::load(&bytes)?;
                 let font_count = fonts.len();
                 if font_count > 1 {
                     println!("TDF bundle: {} fonts", font_count);

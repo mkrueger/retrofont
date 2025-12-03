@@ -8,7 +8,7 @@ use retrofont::{
 fn test_figlet_to_tdf_compatibility() {
     // Load a FIGlet font
     let bytes = include_bytes!("figlet/doom.flf");
-    let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
+    let fig = FigletFont::load(bytes).expect("Failed to load FIGlet font");
 
     // Check compatibility with Block type
     assert!(
@@ -33,7 +33,7 @@ fn test_figlet_to_tdf_compatibility() {
 fn test_figlet_to_tdf_conversion_block() {
     // Load a FIGlet font
     let bytes = include_bytes!("figlet/doom.flf");
-    let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
+    let fig = FigletFont::load(bytes).expect("Failed to load FIGlet font");
 
     // Convert to TDF Block type
     let tdf = figlet_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
@@ -58,7 +58,7 @@ fn test_figlet_to_tdf_conversion_block() {
 fn test_figlet_to_tdf_only_converts_printable_range() {
     // Load a FIGlet font
     let bytes = include_bytes!("figlet/doom.flf");
-    let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
+    let fig = FigletFont::load(bytes).expect("Failed to load FIGlet font");
 
     // Convert to TDF
     let tdf = figlet_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
@@ -91,7 +91,7 @@ fn test_figlet_to_tdf_only_converts_printable_range() {
 fn test_figlet_to_tdf_roundtrip() {
     // Load a FIGlet font
     let bytes = include_bytes!("figlet/doom.flf");
-    let fig = FigletFont::from_bytes(bytes).expect("Failed to load FIGlet font");
+    let fig = FigletFont::load(bytes).expect("Failed to load FIGlet font");
 
     // Convert to TDF
     let tdf = figlet_to_tdf(&fig, TdfFontType::Block).expect("Conversion should succeed");
@@ -100,8 +100,7 @@ fn test_figlet_to_tdf_roundtrip() {
     let tdf_bytes = tdf.to_bytes().expect("Serialization should succeed");
 
     // Parse back
-    let tdf_fonts =
-        retrofont::tdf::TdfFont::load_bundle_bytes(&tdf_bytes).expect("Should parse TDF bytes");
+    let tdf_fonts = retrofont::tdf::TdfFont::load(&tdf_bytes).expect("Should parse TDF bytes");
 
     assert_eq!(tdf_fonts.len(), 1, "Should have one font in bundle");
     let tdf_parsed = &tdf_fonts[0];

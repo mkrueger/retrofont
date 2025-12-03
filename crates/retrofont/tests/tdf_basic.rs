@@ -27,7 +27,7 @@ fn tdf_round_trip_block_single_glyph() {
     };
     font.add_glyph('A', glyph.clone());
     let bytes = font.to_bytes().expect("serialize");
-    let parsed = TdfFont::load_bundle_bytes(&bytes).expect("parse");
+    let parsed = TdfFont::load(&bytes).expect("parse");
     assert_eq!(parsed.len(), 1);
     let p = &parsed[0];
     assert_eq!(p.name, "TEST");
@@ -68,7 +68,7 @@ fn tdf_round_trip_color_attributes() {
     };
     font.add_glyph('Z', glyph.clone());
     let bytes = font.to_bytes().unwrap();
-    let parsed = TdfFont::load_bundle_bytes(&bytes).unwrap();
+    let parsed = TdfFont::load(&bytes).unwrap();
     let mut target = MemoryBufferTarget::new();
     Font::Tdf(parsed[0].clone())
         .render_glyph(&mut target, 'Z', &RenderOptions::edit())
@@ -161,7 +161,7 @@ fn tdf_bundle_multiple_fonts() {
     // Write bundle for manual inspection testing
     std::fs::write("test_bundle.tdf", &bundle).ok();
 
-    let parsed = TdfFont::load_bundle_bytes(&bundle).unwrap();
+    let parsed = TdfFont::load(&bundle).unwrap();
     assert_eq!(parsed.len(), 2);
     assert_eq!(parsed[0].name, "ONE");
     assert_eq!(parsed[1].name, "TWO");
