@@ -68,7 +68,7 @@ pub struct Glyph {
 
 // Outline style table copied from TheDraw (19 styles, 17 characters each)
 // Pre-converted Unicode outline character sets (previously CP437 values converted at runtime)
-const OUTLINE_CHAR_SET_UNICODE: [[char; 17]; 19] = [
+pub const OUTLINE_CHAR_SET_UNICODE: [[char; 17]; 19] = [
     [
         '─', '─', '│', '│', '┌', '┐', '┌', '┐', '└', '┘', '└', '┘', '┤', '├', ' ', ' ', ' ',
     ],
@@ -128,7 +128,7 @@ const OUTLINE_CHAR_SET_UNICODE: [[char; 17]; 19] = [
     ],
 ];
 
-fn transform_outline(outline_style: usize, ch: u8) -> char {
+pub fn transform_outline(outline_style: usize, ch: u8) -> char {
     if ch > 64 && ch - 64 <= 17 {
         if outline_style >= OUTLINE_CHAR_SET_UNICODE.len() {
             CP437_TO_UNICODE[ch as usize]

@@ -6,6 +6,7 @@ mod error;
 pub mod figlet;
 mod font;
 mod glyph;
+pub use glyph::{transform_outline, OUTLINE_CHAR_SET_UNICODE};
 pub mod tdf;
 pub use error::{FontError, Result};
 pub use font::Font;
