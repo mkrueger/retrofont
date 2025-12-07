@@ -87,7 +87,7 @@ impl Font {
         let Some(glyph) = glyph else {
             return Err(FontError::UnknownChar(ch));
         };
-        glyph.render(target, &options)
+        glyph.render(target, options)
     }
 
     /// Load fonts from raw bytes, attempting FIGlet first (header check) then TDF.
@@ -103,25 +103,20 @@ impl Font {
             return Ok(vec![Font::Figlet(fig)]);
         }
         // Attempt TDF: id length byte (0x13=19) followed by 'TheDraw FONTS file' (18 bytes)
-        if bytes.len() >= 19 && bytes[0] == 0x13 {
-            if &bytes[1..19] == b"TheDraw FONTS file" {
-                let fonts = TdfFont::load(bytes)?;
-                if fonts.is_empty() {
-                    return Err(FontError::Parse("tdf: no fonts in bundle".into()));
-                }
-                return Ok(fonts.into_iter().map(Font::Tdf).collect());
+        if bytes.len() >= 19 && bytes[0] == 0x13 && &bytes[1..19] == b"TheDraw FONTS file" {
+            let fonts = TdfFont::load(bytes)?;
+            if fonts.is_empty() {
+                return Err(FontError::TdfEmptyBundle);
             }
+            return Ok(fonts.into_iter().map(Font::Tdf).collect());
         }
-        Err(FontError::Parse("unrecognized font format".into()))
+        Err(FontError::UnrecognizedFormat)
     }
 
     pub fn read<R: Read>(reader: R) -> Result<Vec<Font>> {
         let mut buf = Vec::new();
         let mut reader = reader;
-        // Map IO errors into a parse error (alternatively introduce an Io variant later)
-        reader
-            .read_to_end(&mut buf)
-            .map_err(|e| FontError::Parse(format!("io error reading font data: {e}")))?;
+        reader.read_to_end(&mut buf)?;
         Self::load(&buf)
     }
 }

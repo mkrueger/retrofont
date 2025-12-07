@@ -22,6 +22,12 @@ impl MemoryBufferTarget {
     }
 }
 
+impl Default for MemoryBufferTarget {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FontTarget for MemoryBufferTarget {
     type Error = FontError;
 

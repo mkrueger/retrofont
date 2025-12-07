@@ -191,12 +191,14 @@ fn load_from_memory(data: Vec<u8>) -> retrofont::Result<Vec<Font>> {
 ## Font Types
 
 ### FigletFont
+
 - Text-based ASCII art fonts
 - Supports hard blanks (non-breaking spaces)
 - ZIP archive support for compressed fonts
 - Character range: ASCII printable + extended
 
 ### TdfFont
+
 - Binary format from TheDraw
 - Three font types:
   - **Block**: Simple character-based
@@ -227,10 +229,8 @@ The library uses a `Result<T>` type alias with `FontError`:
 use retrofont::{Font, FontError, Result};
 
 fn load_font(path: &str) -> Result<Vec<Font>> {
-    match std::fs::read(path) {
-        Ok(data) => Font::from_bytes(&data),
-        Err(io_err) => Err(FontError::Parse(format!("Cannot read file: {}", io_err)))
-    }
+    let data = std::fs::read(path)?;  // IO errors auto-convert via From
+    Font::from_bytes(&data)
 }
 ```
 
@@ -242,6 +242,7 @@ retrofont = { version = "0.1.2", default-features = false, features = ["tdf"] }
 ```
 
 Available features:
+
 - `tdf`: TheDraw font support (default)
 - `figlet`: FIGlet font support (default)
 - `convert`: Font conversion utilities (default)
@@ -266,6 +267,7 @@ at your option.
 ## Contributing
 
 Contributions welcome! Please ensure:
+
 - Tests pass: `cargo test`
 - No clippy warnings: `cargo clippy`
 - Formatted: `cargo fmt`

@@ -39,8 +39,7 @@ impl FigletFont {
     }
 
     pub fn load_file(path: &Path) -> Result<Self> {
-        let bytes =
-            fs::read(path).map_err(|e| FontError::Parse(format!("figlet read error: {e}")))?;
+        let bytes = fs::read(path)?;
         Self::load(&bytes)
     }
 
@@ -63,26 +62,23 @@ impl FigletFont {
         let data = bytes;
         // Detect gzip signature (1F 8B) and decompress via zip crate fallback if possible.
         if bytes.len() >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B {
-            // The 'zip' crate doesn't natively handle bare .gz streams; attempt to treat as single-file zip when header matches PK.. else manual inflate not available.
+            // The 'zip' crate doesn't natively handle bare .gz streams.
             // For now return error to avoid pulling second decompression crate.
-            return Err(FontError::Parse(
-                "gzip compressed .flf not supported without flate2; provide .flf or zipped archive"
-                    .into(),
-            ));
+            return Err(FontError::FigletGzipNotSupported);
         }
         // If file looks like a ZIP (PK\x03\x04) attempt to locate a .flf inside.
         if bytes.len() >= 4 && &bytes[0..4] == b"PK\x03\x04" {
             let mut archive = ZipArchive::new(Cursor::new(bytes))
-                .map_err(|e| FontError::Parse(format!("zip open error: {e}")))?;
+                .map_err(|e| FontError::Zip(format!("open error: {e}")))?;
             let mut found = None;
             for i in 0..archive.len() {
                 let mut file = archive
                     .by_index(i)
-                    .map_err(|e| FontError::Parse(format!("zip entry error: {e}")))?;
+                    .map_err(|e| FontError::Zip(format!("entry error: {e}")))?;
                 if file.name().ends_with(".flf") {
                     let mut buf = String::new();
                     file.read_to_string(&mut buf)
-                        .map_err(|e| FontError::Parse(format!("zip read flf error: {e}")))?;
+                        .map_err(|e| FontError::Zip(format!("read error: {e}")))?;
                     found = Some(buf);
                     break;
                 }
@@ -90,20 +86,17 @@ impl FigletFont {
             if let Some(content) = found {
                 return FigletFont::parse_content(&content);
             }
-            return Err(FontError::Parse("zip archive contained no .flf".into()));
+            return Err(FontError::ZipNoFlf);
         }
-        let content =
-            std::str::from_utf8(data).map_err(|e| FontError::Parse(format!("utf8 error: {e}")))?;
+        let content = std::str::from_utf8(data)?;
         FigletFont::parse_content(content)
     }
 
     fn parse_content(content: &str) -> Result<Self> {
         let mut lines = content.lines();
-        let header_line = lines
-            .next()
-            .ok_or_else(|| FontError::Parse("missing header".into()))?;
+        let header_line = lines.next().ok_or(FontError::FigletMissingHeader)?;
         if !header_line.starts_with("flf2a") {
-            return Err(FontError::Parse("not a flf2a header".into()));
+            return Err(FontError::FigletInvalidSignature);
         }
 
         // Extract hard blank character (the character immediately after "flf2a")
@@ -111,14 +104,14 @@ impl FigletFont {
 
         let header_parts: Vec<&str> = header_line.split_whitespace().collect();
         if header_parts.len() < 6 {
-            return Err(FontError::Parse("incomplete header".into()));
+            return Err(FontError::FigletIncompleteHeader);
         }
 
         // Extract header parameters
         let height: usize = header_parts
             .get(1)
             .and_then(|s| s.parse().ok())
-            .ok_or_else(|| FontError::Parse("missing height".into()))?;
+            .ok_or(FontError::FigletMissingHeight)?;
         let comment_count: usize = header_parts
             .get(5)
             .and_then(|s| s.parse().ok())
@@ -170,18 +163,16 @@ impl FigletFont {
         let mut char_lines = Vec::new();
 
         for _ in 0..height {
-            let line = lines
-                .next()
-                .ok_or_else(|| FontError::Parse("incomplete character".into()))?;
+            let line = lines.next().ok_or(FontError::FigletIncompleteChar)?;
 
             // Remove trailing @ markers (single @ for line end, @@ for character end)
-            let trimmed = if line.ends_with("@@") {
-                char_lines.push(line[..line.len() - 2].to_string());
+            let trimmed = if let Some(stripped) = line.strip_suffix("@@") {
+                char_lines.push(stripped.to_string());
                 break;
-            } else if line.ends_with('@') {
-                line[..line.len() - 1].to_string()
+            } else if let Some(stripped) = line.strip_suffix('@') {
+                stripped.to_string()
             } else {
-                return Err(FontError::Parse("character line missing @ marker".into()));
+                return Err(FontError::FigletMissingMarker);
             };
 
             char_lines.push(trimmed);

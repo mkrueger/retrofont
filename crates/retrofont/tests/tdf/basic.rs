@@ -74,7 +74,7 @@ fn tdf_round_trip_color_attributes() {
     Font::Tdf(parsed[0].clone())
         .render_glyph(&mut target, 'Z', &RenderOptions::default())
         .unwrap();
-    assert!(lines_to_strings(&target).len() > 0);
+    assert!(!lines_to_strings(&target).is_empty());
 }
 
 #[test]

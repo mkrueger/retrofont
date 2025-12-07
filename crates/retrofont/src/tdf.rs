@@ -88,23 +88,23 @@ impl TdfFont {
     pub fn load(bytes: &[u8]) -> Result<Vec<Self>> {
         // Parse one or multiple fonts from bundle
         if bytes.len() < 20 {
-            return Err(FontError::Parse("tdf: file too short".into()));
+            return Err(FontError::TdfFileTooShort);
         }
         let mut o = 0usize;
         let id_len = bytes[o] as usize;
         o += 1;
         if id_len != THE_DRAW_FONT_ID.len() + 1 {
-            return Err(FontError::Parse(format!(
-                "tdf: id length mismatch {}",
-                id_len
-            )));
+            return Err(FontError::TdfIdLengthMismatch {
+                expected: THE_DRAW_FONT_ID.len() + 1,
+                got: id_len,
+            });
         }
         if &bytes[o..o + 18] != THE_DRAW_FONT_ID {
-            return Err(FontError::Parse("tdf: id mismatch".into()));
+            return Err(FontError::TdfIdMismatch);
         }
         o += 18;
         if bytes[o] != CTRL_Z {
-            return Err(FontError::Parse("tdf: missing ctrl-z".into()));
+            return Err(FontError::TdfMissingCtrlZ);
         }
         o += 1;
         let mut fonts = Vec::new();
@@ -113,21 +113,23 @@ impl TdfFont {
                 break;
             } // bundle terminator
             if o + 4 > bytes.len() {
-                return Err(FontError::Parse("tdf: truncated indicator".into()));
+                return Err(FontError::TdfTruncated { field: "indicator" });
             }
             let indicator = u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
             if indicator != FONT_INDICATOR {
-                return Err(FontError::Parse("tdf: font indicator mismatch".into()));
+                return Err(FontError::TdfFontIndicatorMismatch);
             }
             o += 4;
             if o >= bytes.len() {
-                return Err(FontError::Parse("tdf: truncated name len".into()));
+                return Err(FontError::TdfTruncated {
+                    field: "name length",
+                });
             }
             let orig_len = bytes[o] as usize;
             o += 1;
             let mut name_len = orig_len.min(FONT_NAME_LEN_MAX);
             if o + name_len > bytes.len() {
-                return Err(FontError::Parse("tdf: truncated name".into()));
+                return Err(FontError::TdfTruncated { field: "name" });
             }
             for i in 0..name_len {
                 if bytes[o + i] == 0 {
@@ -139,27 +141,31 @@ impl TdfFont {
             o += FONT_NAME_LEN; // always skip full 12 bytes region
             o += 4; // magic bytes
             if o >= bytes.len() {
-                return Err(FontError::Parse("tdf: truncated font type".into()));
+                return Err(FontError::TdfTruncated { field: "font type" });
             }
             let font_type = match bytes[o] {
                 0 => TdfFontType::Outline,
                 1 => TdfFontType::Block,
                 2 => TdfFontType::Color,
-                other => return Err(FontError::Parse(format!("tdf: unsupported type {}", other))),
+                other => return Err(FontError::TdfUnsupportedType(other)),
             };
             o += 1;
             if o >= bytes.len() {
-                return Err(FontError::Parse("tdf: truncated spacing".into()));
+                return Err(FontError::TdfTruncated { field: "spacing" });
             }
             let spacing = bytes[o] as i32;
             o += 1;
             if o + 2 > bytes.len() {
-                return Err(FontError::Parse("tdf: truncated block size".into()));
+                return Err(FontError::TdfTruncated {
+                    field: "block size",
+                });
             }
             let block_size = (bytes[o] as u16 | ((bytes[o + 1] as u16) << 8)) as usize;
             o += 2;
             if o + CHAR_TABLE_SIZE * 2 > bytes.len() {
-                return Err(FontError::Parse("tdf: truncated char table".into()));
+                return Err(FontError::TdfTruncated {
+                    field: "char table",
+                });
             }
             let mut lookup = Vec::with_capacity(CHAR_TABLE_SIZE);
             for _ in 0..CHAR_TABLE_SIZE {
@@ -168,7 +174,9 @@ impl TdfFont {
                 lookup.push(off);
             }
             if o + block_size > bytes.len() {
-                return Err(FontError::Parse("tdf: block size beyond file".into()));
+                return Err(FontError::TdfTruncated {
+                    field: "glyph block",
+                });
             }
             let base = o; // start of glyph block
             let mut font = TdfFont::new(name, font_type, spacing);
@@ -178,10 +186,10 @@ impl TdfFont {
                     continue;
                 }
                 if glyph_offset >= block_size {
-                    return Err(FontError::Parse(format!(
-                        "tdf: glyph {} outside block",
-                        glyph_offset
-                    )));
+                    return Err(FontError::TdfGlyphOutOfBounds {
+                        offset: glyph_offset,
+                        size: block_size,
+                    });
                 }
                 glyph_offset += base;
                 if glyph_offset + 2 > bytes.len() {
@@ -246,7 +254,7 @@ impl TdfFont {
                                 parts.push(GlyphPart::FillMarker);
                             } else if ch == b'O' {
                                 parts.push(GlyphPart::OutlineHole);
-                            } else if ch >= b'A' && ch <= b'R' {
+                            } else if (b'A'..=b'R').contains(&ch) {
                                 parts.push(GlyphPart::OutlinePlaceholder(ch));
                             } else if ch == b' ' {
                                 parts.push(GlyphPart::Char(' '));
@@ -302,10 +310,10 @@ impl TdfFont {
     fn append_font_data(&self, out: &mut Vec<u8>) -> Result<()> {
         out.extend(u32::to_le_bytes(FONT_INDICATOR));
         if self.name.len() > FONT_NAME_LEN {
-            return Err(FontError::Parse(format!(
-                "name too long {}",
-                self.name.len()
-            )));
+            return Err(FontError::TdfNameTooLong {
+                len: self.name.len(),
+                max: FONT_NAME_LEN,
+            });
         }
         out.push(FONT_NAME_LEN as u8);
         out.extend(self.name.as_bytes());

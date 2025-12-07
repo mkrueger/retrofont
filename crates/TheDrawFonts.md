@@ -13,7 +13,7 @@ The TheDraw font format is a compact binary container created for DOS-era ANSI a
 
 ## File Layout (Bundle)
 
-```
+```text
 +0      : 1 byte  = ID length (always 0x13 for legacy bundles: 19 bytes + 1 control)
 +1..+18 : "TheDraw FONTS file" (18 ASCII bytes)
 +19     : 0x1A (CTRL-Z DOS EOF marker)
@@ -55,7 +55,7 @@ After processing a record, parsing continues at the next byte—until the bundle
 
 Each glyph referenced via the lookup offset is stored as:
 
-```
+```text
 Byte 0  : width
 Byte 1  : height
 Byte 2+ : part stream ... terminated by 0x00
@@ -81,7 +81,7 @@ All other bytes are interpreted as **character codes** (CP437) whose Unicode equ
 
 Each displayed character is stored as:
 
-```
+```text
 [char_code][attribute_byte]
 ```
 
@@ -89,7 +89,7 @@ The second byte is a classic DOS text‑mode attribute (as used in VGA 80×25 te
 
 Attribute byte bit layout:
 
-```
+```text
 7 6 5 4 3 2 1 0
 B b b b f f f f
 ```
@@ -105,12 +105,14 @@ RetroFont converts these to `GlyphPart::Colored { ch, fg, bg, blink }`.
 ### Block Glyphs (Type = 1)
 
 Each byte is either:
+
 - `0xFF` → HardBlank
 - Otherwise → CP437 mapped to Unicode → `GlyphPart::Char(c)`
 
 ### Outline Glyphs (Type = 0)
 
 Outline fonts compress decorative box/stroke styles using placeholder bytes:
+
 - `A`–`R` map to indexed stroke characters (RetroFont expands them to Unicode box drawing chars at render time).
 - `@` and `O` represent fill/hole tokens (useful in edit mode visibility).
 - Raw spaces `' '` are preserved.
@@ -123,6 +125,7 @@ This separation allows post-processing (style transforms, variant themes) withou
 ## CP437 → Unicode Mapping
 
 The original format uses IBM Code Page 437. RetroFont includes:
+
 - `CP437_TO_UNICODE[256]` array: direct conversion.
 - `UNICODE_TO_CP437` lazy `HashMap<char, u8>` for serialization (skips `'\0'` to avoid unintended mapping).
 - Serialization falls back to `'?'` if a character cannot be mapped back.
@@ -132,10 +135,12 @@ The original format uses IBM Code Page 437. RetroFont includes:
 ## Spacing Behavior
 
 The **spacing** byte gives a recommended inter-glyph horizontal advance. Use cases:
+
 - If the space character is missing, emit `spacing` columns of blanks.
 - Editors or renderers may override this with kerning or smushing (not part of TDF; FIGlet handles smushing separately).
 
-RetroFont’s renderer:
+RetroFont's renderer:
+
 1. Checks for a defined `' '` glyph.
 2. Falls back to spacing value (`>= 1`) if absent.
 
@@ -165,7 +170,7 @@ Font records partially present at EOF are rejected (defensive parsing).
 
 ## Example (Annotated Hex Snippet)
 
-```
+```text
 13                                        ; id length (0x13 = 19 + 1)
 54 68 65 44 72 61 77 20 46 4F 4E 54 53 20 ; "TheDraw FONTS "
 66 69 6C 65                               ; "file"
@@ -209,6 +214,7 @@ E4 00                                     ; glyph block size (0x00E4)
 ## Serialization (Writing Fonts)
 
 When writing:
+
 - Reconstruct lookup table: offset or `0xFFFF`.
 - Pack glyphs sequentially, translating Unicode → CP437.
 - Insert terminators.
@@ -248,6 +254,7 @@ Original CP437 specifics (line drawing, Greek letters) are preserved through dir
 ## Summary
 
 TheDraw’s TDF format balances compact binary representation with enough metadata to support:
+
 - Multi-font distribution
 - Stylized outlines
 - Colored glyph cells

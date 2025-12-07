@@ -18,7 +18,7 @@ const TDF_LAST_CHAR: char = '~'; // 0x7E
 pub fn can_convert_figlet_to_tdf(fig: &FigletFont, _target_type: TdfFontType) -> bool {
     // Check if font has any characters in the TDF range with valid dimensions
     (TDF_FIRST_CHAR..=TDF_LAST_CHAR).any(|code| {
-        if let Some(glyph) = fig.glyph(code as char) {
+        if let Some(glyph) = fig.glyph(code) {
             glyph.width <= MAX_TDF_GLYPH_WIDTH && glyph.height <= MAX_TDF_GLYPH_HEIGHT
         } else {
             false
@@ -49,17 +49,14 @@ pub fn figlet_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfFo
 
     // Check compatibility
     if !can_convert_figlet_to_tdf(fig, target_type) {
-        return Err(FontError::Parse(
-            "FIGlet font is not compatible with TDF conversion".into(),
-        ));
+        return Err(FontError::ConversionIncompatible);
     }
 
     let mut tdf = TdfFont::new(fig.name.clone(), target_type, 1);
 
     // Only convert characters in the TDF printable range: ! (0x21) through ~ (0x7E)
     for code in TDF_FIRST_CHAR..=TDF_LAST_CHAR {
-        let ch = code as char;
-        if let Some(g) = fig.glyph(ch) {
+        if let Some(g) = fig.glyph(code) {
             // Skip glyphs that exceed TDF dimension limits
             if g.width > MAX_TDF_GLYPH_WIDTH || g.height > MAX_TDF_GLYPH_HEIGHT {
                 continue;
