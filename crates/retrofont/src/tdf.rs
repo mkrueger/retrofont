@@ -56,8 +56,8 @@ impl std::error::Error for TdfParseError {}
 pub struct TdfFont {
     pub name: String,
     pub font_type: TdfFontType,
-    spacing: i32,
-    glyphs: HashMap<char, Glyph>,
+    pub spacing: i32,
+    pub glyphs: HashMap<char, Glyph>,
 }
 
 impl TdfFont {

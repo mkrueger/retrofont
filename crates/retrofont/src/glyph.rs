@@ -141,6 +141,15 @@ pub fn transform_outline(outline_style: usize, ch: u8) -> char {
 }
 
 impl Glyph {
+    /// Create a new empty glyph with given dimensions
+    pub fn new(width: usize, height: usize) -> Self {
+        Self {
+            width,
+            height,
+            parts: Vec::new(),
+        }
+    }
+
     /// Render this glyph onto a target using the specified render mode.
     ///
     /// Edit mode exposes internal markers (HardBlank NBSP, '@', 'O', '&').
