@@ -19,6 +19,7 @@ const TDF_LAST_CHAR: u8 = b'~';
 
 pub const MAX_TDF_GLYPH_WIDTH: usize = 30;
 pub const MAX_TDF_GLYPH_HEIGHT: usize = 12;
+const INVALID_GLYPH: u16 = 0xFFFF;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TdfFontType {
@@ -114,6 +115,27 @@ impl TdfFont {
         self.glyphs_overlay[idx] = Some(glyph);
     }
 
+    /// Removes a glyph from this font.
+    /// Returns `true` if a glyph was present and has been removed.
+    pub fn remove_glyph(&mut self, ch: char) -> bool {
+        let Some(idx) = tdf_index(ch) else {
+            return false;
+        };
+        let had_overlay = self.glyphs_overlay[idx].take().is_some();
+        let had_lazy = if let Some(lazy) = &mut self.lazy {
+            if lazy.lookup[idx] != INVALID_GLYPH {
+                lazy.lookup[idx] = INVALID_GLYPH;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        had_overlay || had_lazy
+    }
+        
+
     /// Returns the number of defined characters in this font.
     pub fn glyph_count(&self) -> usize {
         let mut count = 0usize;
@@ -123,7 +145,7 @@ impl TdfFont {
                 continue;
             }
             if let Some(lazy) = &self.lazy {
-                if lazy.lookup[i] != 0xFFFF {
+                if lazy.lookup[i] != INVALID_GLYPH {
                     count += 1;
                 }
             }
@@ -242,7 +264,7 @@ impl TdfFont {
             }
             // Validate lookup offsets are within block once, so glyph() can stay fast.
             for off in lookup.iter().copied() {
-                if off == 0xFFFF {
+                if off == INVALID_GLYPH {
                     continue;
                 }
                 let off_usize = off as usize;
@@ -361,7 +383,7 @@ impl TdfFont {
                 }
                 glyph_block.push(0); // terminator
             } else {
-                lookup.extend(u16::to_le_bytes(0xFFFF));
+                lookup.extend(u16::to_le_bytes(INVALID_GLYPH));
             }
         }
         out.extend(u16::to_le_bytes(glyph_block.len() as u16));
@@ -378,7 +400,7 @@ impl TdfFont {
             return Some(g);
         }
         let lazy = self.lazy.as_ref()?;
-        if lazy.lookup[idx] == 0xFFFF {
+        if lazy.lookup[idx] == INVALID_GLYPH {
             return None;
         }
 
@@ -405,7 +427,7 @@ impl TdfFont {
         }
         self.lazy
             .as_ref()
-            .is_some_and(|lazy| lazy.lookup[idx] != 0xFFFF)
+            .is_some_and(|lazy| lazy.lookup[idx] != INVALID_GLYPH)
     }
 }
 

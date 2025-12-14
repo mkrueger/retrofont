@@ -14,7 +14,7 @@ name = "retrofont"
 path = "src/main.rs"
 
 [dependencies]
-retrofont = { version = "0.2.1", path = "../retrofont" }
+retrofont = { version = "0.2.2", path = "../retrofont" }
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 
