@@ -5,6 +5,7 @@ use crate::{
 };
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 
 // Constants adapted from icy_engine TheDrawFont
 const THE_DRAW_FONT_ID: &[u8; 18] = b"TheDraw FONTS file";
@@ -13,6 +14,8 @@ const FONT_INDICATOR: u32 = 0xFF00_AA55;
 const FONT_NAME_LEN: usize = 12;
 const FONT_NAME_LEN_MAX: usize = 16; // 12 + 4 nulls
 const CHAR_TABLE_SIZE: usize = 94; // printable  !..~ range
+const TDF_FIRST_CHAR: u8 = b'!';
+const TDF_LAST_CHAR: u8 = b'~';
 
 pub const MAX_TDF_GLYPH_WIDTH: usize = 30;
 pub const MAX_TDF_GLYPH_HEIGHT: usize = 12;
@@ -57,7 +60,40 @@ pub struct TdfFont {
     pub name: String,
     pub font_type: TdfFontType,
     pub spacing: i32,
-    pub glyphs: HashMap<char, Glyph>,
+    // Overlay for programmatically constructed/modified glyphs.
+    // Index 0 corresponds to '!'.
+    glyphs_overlay: [Option<Glyph>; CHAR_TABLE_SIZE],
+    // Lazy glyph source for parsed fonts.
+    lazy: Option<LazyGlyphSource>,
+}
+
+#[derive(Clone)]
+struct LazyGlyphSource {
+    bytes: Arc<[u8]>,
+    font_type: TdfFontType,
+    glyph_block_base: usize,
+    glyph_block_end: usize,
+    lookup: [u16; CHAR_TABLE_SIZE],
+    cache: Arc<[OnceLock<Glyph>; CHAR_TABLE_SIZE]>,
+}
+
+#[inline]
+fn tdf_index(ch: char) -> Option<usize> {
+    let code = ch as u32;
+    if code > u8::MAX as u32 {
+        return None;
+    }
+    let b = code as u8;
+    if (TDF_FIRST_CHAR..=TDF_LAST_CHAR).contains(&b) {
+        Some((b - TDF_FIRST_CHAR) as usize)
+    } else {
+        None
+    }
+}
+
+#[inline]
+fn tdf_char(index: usize) -> char {
+    (TDF_FIRST_CHAR + index as u8) as char
 }
 
 impl TdfFont {
@@ -66,17 +102,33 @@ impl TdfFont {
             name: name.into(),
             font_type,
             spacing,
-            glyphs: HashMap::new(),
+            glyphs_overlay: std::array::from_fn(|_| None),
+            lazy: None,
         }
     }
 
     pub fn add_glyph(&mut self, ch: char, glyph: Glyph) {
-        self.glyphs.insert(ch, glyph);
+        let Some(idx) = tdf_index(ch) else {
+            return;
+        };
+        self.glyphs_overlay[idx] = Some(glyph);
     }
 
     /// Returns the number of defined characters in this font.
     pub fn glyph_count(&self) -> usize {
-        self.glyphs.len()
+        let mut count = 0usize;
+        for i in 0..CHAR_TABLE_SIZE {
+            if self.glyphs_overlay[i].is_some() {
+                count += 1;
+                continue;
+            }
+            if let Some(lazy) = &self.lazy {
+                if lazy.lookup[i] != 0xFFFF {
+                    count += 1;
+                }
+            }
+        }
+        count
     }
 
     /// Calculate the average width of defined glyphs (excluding space if undefined).
@@ -86,12 +138,18 @@ impl TdfFont {
     }
 
     pub fn load(bytes: &[u8]) -> Result<Vec<Self>> {
+        // Backwards-compatible API: this copies bytes for lazy decoding.
+        Self::load_arc(Arc::<[u8]>::from(bytes.to_vec()))
+    }
+
+    pub fn load_arc(bytes: Arc<[u8]>) -> Result<Vec<Self>> {
         // Parse one or multiple fonts from bundle
-        if bytes.len() < 20 {
+        let b = bytes.as_ref();
+        if b.len() < 20 {
             return Err(FontError::TdfFileTooShort);
         }
         let mut o = 0usize;
-        let id_len = bytes[o] as usize;
+        let id_len = b[o] as usize;
         o += 1;
         if id_len != THE_DRAW_FONT_ID.len() + 1 {
             return Err(FontError::TdfIdLengthMismatch {
@@ -99,181 +157,123 @@ impl TdfFont {
                 got: id_len,
             });
         }
-        if &bytes[o..o + 18] != THE_DRAW_FONT_ID {
+        if &b[o..o + 18] != THE_DRAW_FONT_ID {
             return Err(FontError::TdfIdMismatch);
         }
         o += 18;
-        if bytes[o] != CTRL_Z {
+        if b[o] != CTRL_Z {
             return Err(FontError::TdfMissingCtrlZ);
         }
         o += 1;
         let mut fonts = Vec::new();
-        while o < bytes.len() {
-            if bytes[o] == 0 {
+        while o < b.len() {
+            if b[o] == 0 {
                 break;
             } // bundle terminator
-            if o + 4 > bytes.len() {
+            if o + 4 > b.len() {
                 return Err(FontError::TdfTruncated { field: "indicator" });
             }
-            let indicator = u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+            let indicator = u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
             if indicator != FONT_INDICATOR {
                 return Err(FontError::TdfFontIndicatorMismatch);
             }
             o += 4;
-            if o >= bytes.len() {
+            if o >= b.len() {
                 return Err(FontError::TdfTruncated {
                     field: "name length",
                 });
             }
-            let orig_len = bytes[o] as usize;
+            let orig_len = b[o] as usize;
             o += 1;
             let mut name_len = orig_len.min(FONT_NAME_LEN_MAX);
-            if o + name_len > bytes.len() {
+            if o + name_len > b.len() {
                 return Err(FontError::TdfTruncated { field: "name" });
             }
             for i in 0..name_len {
-                if bytes[o + i] == 0 {
+                if b[o + i] == 0 {
                     name_len = i;
                     break;
                 }
             }
-            let name = String::from_utf8_lossy(&bytes[o..o + name_len]).to_string();
+            let name = String::from_utf8_lossy(&b[o..o + name_len]).into_owned();
             o += FONT_NAME_LEN; // always skip full 12 bytes region
             o += 4; // magic bytes
-            if o >= bytes.len() {
+            if o >= b.len() {
                 return Err(FontError::TdfTruncated { field: "font type" });
             }
-            let font_type = match bytes[o] {
+            let font_type = match b[o] {
                 0 => TdfFontType::Outline,
                 1 => TdfFontType::Block,
                 2 => TdfFontType::Color,
                 other => return Err(FontError::TdfUnsupportedType(other)),
             };
             o += 1;
-            if o >= bytes.len() {
+            if o >= b.len() {
                 return Err(FontError::TdfTruncated { field: "spacing" });
             }
-            let spacing = bytes[o] as i32;
+            let spacing = b[o] as i32;
             o += 1;
-            if o + 2 > bytes.len() {
+            if o + 2 > b.len() {
                 return Err(FontError::TdfTruncated {
                     field: "block size",
                 });
             }
-            let block_size = (bytes[o] as u16 | ((bytes[o + 1] as u16) << 8)) as usize;
+            let block_size = (b[o] as u16 | ((b[o + 1] as u16) << 8)) as usize;
             o += 2;
-            if o + CHAR_TABLE_SIZE * 2 > bytes.len() {
+            if o + CHAR_TABLE_SIZE * 2 > b.len() {
                 return Err(FontError::TdfTruncated {
                     field: "char table",
                 });
             }
-            let mut lookup = Vec::with_capacity(CHAR_TABLE_SIZE);
-            for _ in 0..CHAR_TABLE_SIZE {
-                let off = bytes[o] as u16 | ((bytes[o + 1] as u16) << 8);
-                o += 2;
-                lookup.push(off);
+            let mut lookup: [u16; CHAR_TABLE_SIZE] = [0u16; CHAR_TABLE_SIZE];
+            // We did one bounds check above; now do unchecked reads in the hot loop.
+            unsafe {
+                for i in 0..CHAR_TABLE_SIZE {
+                    let lo = *b.get_unchecked(o);
+                    let hi = *b.get_unchecked(o + 1);
+                    lookup[i] = u16::from_le_bytes([lo, hi]);
+                    o += 2;
+                }
             }
-            if o + block_size > bytes.len() {
+            if o + block_size > b.len() {
                 return Err(FontError::TdfTruncated {
                     field: "glyph block",
                 });
             }
-            let base = o; // start of glyph block
-            let mut font = TdfFont::new(name, font_type, spacing);
-            for (i, char_offset) in lookup.iter().enumerate() {
-                let mut glyph_offset = *char_offset as usize;
-                if glyph_offset == 0xFFFF {
+            // Validate lookup offsets are within block once, so glyph() can stay fast.
+            for off in lookup.iter().copied() {
+                if off == 0xFFFF {
                     continue;
                 }
-                if glyph_offset >= block_size {
+                let off_usize = off as usize;
+                if off_usize >= block_size {
                     return Err(FontError::TdfGlyphOutOfBounds {
-                        offset: glyph_offset,
+                        offset: off_usize,
                         size: block_size,
                     });
                 }
-                glyph_offset += base;
-                if glyph_offset + 2 > bytes.len() {
-                    continue;
-                }
-                let width = bytes[glyph_offset] as usize;
-                glyph_offset += 1;
-                let height = bytes[glyph_offset] as usize;
-                glyph_offset += 1;
-                let mut parts = Vec::new();
-                loop {
-                    if glyph_offset >= bytes.len() {
-                        break;
-                    }
-                    let ch = bytes[glyph_offset];
-                    glyph_offset += 1;
-                    if ch == 0 {
-                        break;
-                    }
-                    if ch == 13 {
-                        parts.push(GlyphPart::NewLine);
-                        continue;
-                    }
-                    if ch == b'&' {
-                        parts.push(GlyphPart::EndMarker);
-                        continue;
-                    }
-                    match font_type {
-                        TdfFontType::Color => {
-                            if glyph_offset >= bytes.len() {
-                                break;
-                            }
-                            let attr = bytes[glyph_offset];
-                            glyph_offset += 1;
-                            let fg = attr & 0x0F;
-                            let bg = (attr >> 4) & 0x07;
-                            let blink = (attr & 0x80) != 0;
-
-                            if ch == 0xFF {
-                                parts.push(GlyphPart::HardBlank);
-                            } else {
-                                let uc = crate::tdf::CP437_TO_UNICODE[ch as usize];
-                                parts.push(GlyphPart::AnsiChar {
-                                    ch: uc,
-                                    fg,
-                                    bg,
-                                    blink,
-                                });
-                            }
-                        }
-                        TdfFontType::Block => {
-                            if ch == 0xFF {
-                                parts.push(GlyphPart::HardBlank);
-                            } else {
-                                parts.push(GlyphPart::Char(
-                                    crate::tdf::CP437_TO_UNICODE[ch as usize],
-                                ));
-                            }
-                        }
-                        TdfFontType::Outline => {
-                            if ch == b'@' {
-                                parts.push(GlyphPart::FillMarker);
-                            } else if ch == b'O' {
-                                parts.push(GlyphPart::OutlineHole);
-                            } else if (b'A'..=b'R').contains(&ch) {
-                                parts.push(GlyphPart::OutlinePlaceholder(ch));
-                            } else if ch == b' ' {
-                                parts.push(GlyphPart::Char(' '));
-                            } else {
-                                parts.push(GlyphPart::Char(
-                                    crate::tdf::CP437_TO_UNICODE[ch as usize],
-                                ));
-                            }
-                        }
-                    }
-                }
-                let glyph = Glyph {
-                    width,
-                    height,
-                    parts,
-                };
-                let ch = (b' ' + 1 + i as u8) as char; // map printable range starting at space+1
-                font.glyphs.insert(ch, glyph);
             }
+
+            let base = o; // start of glyph block
+            let glyph_block_end = o + block_size;
+            let cache: Arc<[OnceLock<Glyph>; CHAR_TABLE_SIZE]> =
+                Arc::new(std::array::from_fn(|_| OnceLock::new()));
+
+            let font = TdfFont {
+                name,
+                font_type,
+                spacing,
+                glyphs_overlay: std::array::from_fn(|_| None),
+                lazy: Some(LazyGlyphSource {
+                    bytes: bytes.clone(),
+                    font_type,
+                    glyph_block_base: base,
+                    glyph_block_end,
+                    lookup,
+                    cache,
+                }),
+            };
+
             o += block_size;
             fonts.push(font);
         }
@@ -283,7 +283,10 @@ impl TdfFont {
     /// Iterate over all defined glyphs, yielding (char, &Glyph).
     /// Skips empty slots. Only characters with code < 256 are considered.
     pub fn iter_glyphs(&self) -> impl Iterator<Item = (char, &Glyph)> {
-        self.glyphs.iter().map(|(ch, glyph)| (*ch, glyph))
+        (0..CHAR_TABLE_SIZE).filter_map(move |i| {
+            let ch = tdf_char(i);
+            self.glyph(ch).map(|g| (ch, g))
+        })
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
@@ -330,8 +333,8 @@ impl TdfFont {
         let mut lookup = Vec::new();
         let mut glyph_block = Vec::new();
         for i in 0..CHAR_TABLE_SIZE {
-            let ch = (b' ' + 1 + i as u8) as char;
-            if let Some(g) = self.glyphs.get(&ch) {
+            let ch = tdf_char(i);
+            if let Some(g) = self.glyph(ch) {
                 lookup.extend(u16::to_le_bytes(glyph_block.len() as u16));
                 glyph_block.push(g.width as u8);
                 glyph_block.push(g.height as u8);
@@ -370,7 +373,23 @@ impl TdfFont {
     /// Safe access to a glyph by raw byte code (0-255).
     /// Mirrors `FigletFont::glyph` for API consistency.
     pub fn glyph(&self, ch: char) -> Option<&Glyph> {
-        self.glyphs.get(&ch)
+        let idx = tdf_index(ch)?;
+        if let Some(g) = self.glyphs_overlay[idx].as_ref() {
+            return Some(g);
+        }
+        let lazy = self.lazy.as_ref()?;
+        if lazy.lookup[idx] == 0xFFFF {
+            return None;
+        }
+
+        // Quick sanity check (best-effort) so cache init can stay infallible.
+        let off = lazy.lookup[idx] as usize;
+        let abs = lazy.glyph_block_base + off;
+        if abs + 2 > lazy.glyph_block_end {
+            return None;
+        }
+
+        Some(lazy.cache[idx].get_or_init(|| decode_glyph(lazy, idx)))
     }
 
     pub fn font_type(&self) -> TdfFontType {
@@ -378,7 +397,101 @@ impl TdfFont {
     }
 
     pub fn has_char(&self, ch: char) -> bool {
-        self.glyphs.contains_key(&ch)
+        let Some(idx) = tdf_index(ch) else {
+            return false;
+        };
+        if self.glyphs_overlay[idx].is_some() {
+            return true;
+        }
+        self.lazy
+            .as_ref()
+            .is_some_and(|lazy| lazy.lookup[idx] != 0xFFFF)
+    }
+}
+
+fn decode_glyph(lazy: &LazyGlyphSource, idx: usize) -> Glyph {
+    let b = lazy.bytes.as_ref();
+    let off = lazy.lookup[idx] as usize;
+    let mut p = lazy.glyph_block_base + off;
+
+    // Width/height are inside the glyph block.
+    if p + 2 > lazy.glyph_block_end {
+        return Glyph {
+            width: 0,
+            height: 0,
+            parts: Vec::new(),
+        };
+    }
+
+    let width = unsafe { *b.get_unchecked(p) as usize };
+    let height = unsafe { *b.get_unchecked(p + 1) as usize };
+    p += 2;
+
+    let mut parts = Vec::with_capacity(width.saturating_mul(height).saturating_add(height));
+    while p < lazy.glyph_block_end {
+        let ch = unsafe { *b.get_unchecked(p) };
+        p += 1;
+        if ch == 0 {
+            break;
+        }
+        if ch == 13 {
+            parts.push(GlyphPart::NewLine);
+            continue;
+        }
+        if ch == b'&' {
+            parts.push(GlyphPart::EndMarker);
+            continue;
+        }
+
+        match lazy.font_type {
+            TdfFontType::Color => {
+                if p >= lazy.glyph_block_end {
+                    break;
+                }
+                let attr = unsafe { *b.get_unchecked(p) };
+                p += 1;
+                let fg = attr & 0x0F;
+                let bg = (attr >> 4) & 0x07;
+                let blink = (attr & 0x80) != 0;
+                if ch == 0xFF {
+                    parts.push(GlyphPart::HardBlank);
+                } else {
+                    let uc = CP437_TO_UNICODE[ch as usize];
+                    parts.push(GlyphPart::AnsiChar {
+                        ch: uc,
+                        fg,
+                        bg,
+                        blink,
+                    });
+                }
+            }
+            TdfFontType::Block => {
+                if ch == 0xFF {
+                    parts.push(GlyphPart::HardBlank);
+                } else {
+                    parts.push(GlyphPart::Char(CP437_TO_UNICODE[ch as usize]));
+                }
+            }
+            TdfFontType::Outline => {
+                if ch == b'@' {
+                    parts.push(GlyphPart::FillMarker);
+                } else if ch == b'O' {
+                    parts.push(GlyphPart::OutlineHole);
+                } else if (b'A'..=b'R').contains(&ch) {
+                    parts.push(GlyphPart::OutlinePlaceholder(ch));
+                } else if ch == b' ' {
+                    parts.push(GlyphPart::Char(' '));
+                } else {
+                    parts.push(GlyphPart::Char(CP437_TO_UNICODE[ch as usize]));
+                }
+            }
+        }
+    }
+
+    Glyph {
+        width,
+        height,
+        parts,
     }
 }
 

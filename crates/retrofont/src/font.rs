@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::sync::Arc;
 
 use crate::{
     figlet::FigletFont, glyph::RenderOptions, tdf::TdfFont, FontError, FontTarget, Result,
@@ -113,10 +114,38 @@ impl Font {
         Err(FontError::UnrecognizedFormat)
     }
 
+    /// Load fonts from an owned buffer without copying.
+    pub fn load_owned(bytes: Vec<u8>) -> Result<Vec<Font>> {
+        let arc: Arc<[u8]> = Arc::<[u8]>::from(bytes);
+        Self::load_arc(arc)
+    }
+
+    /// Load fonts from an `Arc<[u8]>` (enables zero-copy lazy decoding for TDF).
+    pub fn load_arc(bytes: Arc<[u8]>) -> Result<Vec<Font>> {
+        let b = bytes.as_ref();
+
+        // Attempt FIGlet: header starts with 'flf2a'
+        if b.len() >= 5 && &b[0..5] == b"flf2a" {
+            let fig = FigletFont::load_arc(bytes)?;
+            return Ok(vec![Font::Figlet(fig)]);
+        }
+
+        // Attempt TDF: id length byte (0x13=19) followed by 'TheDraw FONTS file' (18 bytes)
+        if b.len() >= 19 && b[0] == 0x13 && &b[1..19] == b"TheDraw FONTS file" {
+            let fonts = TdfFont::load_arc(bytes)?;
+            if fonts.is_empty() {
+                return Err(FontError::TdfEmptyBundle);
+            }
+            return Ok(fonts.into_iter().map(Font::Tdf).collect());
+        }
+
+        Err(FontError::UnrecognizedFormat)
+    }
+
     pub fn read<R: Read>(reader: R) -> Result<Vec<Font>> {
         let mut buf = Vec::new();
         let mut reader = reader;
         reader.read_to_end(&mut buf)?;
-        Self::load(&buf)
+        Self::load_owned(buf)
     }
 }

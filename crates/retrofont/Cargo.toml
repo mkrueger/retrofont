@@ -1,6 +1,6 @@
 [package]
 name = "retrofont"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["Mike Krüger <mkrueger@posteo.de>"]
 license = "MIT OR Apache-2.0"
@@ -23,3 +23,9 @@ once_cell = "1.21.3"
 
 [dev-dependencies]
 pretty_assertions = "1"
+criterion = "0.8.1"
+
+[[bench]]
+name = "tdf_loading"
+harness = false
+path = "../../benches/tdf_loading.rs"
