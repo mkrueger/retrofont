@@ -134,7 +134,6 @@ impl TdfFont {
         };
         had_overlay || had_lazy
     }
-        
 
     /// Returns the number of defined characters in this font.
     pub fn glyph_count(&self) -> usize {
@@ -414,6 +413,21 @@ impl TdfFont {
         Some(lazy.cache[idx].get_or_init(|| decode_glyph(lazy, idx)))
     }
 
+    /// Get the size of a glyph (width, height)
+    pub fn glyph_size(&self, ch: char) -> Option<(usize, usize)> {
+        self.glyph(ch).map(|g| (g.width, g.height))
+    }
+
+    /// Get the maximum height of all glyphs in this font
+    pub fn max_height(&self) -> usize {
+        let mut max_h = 0;
+        for ch in '!'..='~' {
+            if let Some(g) = self.glyph(ch) {
+                max_h = max_h.max(g.height);
+            }
+        }
+        max_h.max(1)
+    }
     pub fn font_type(&self) -> TdfFontType {
         self.font_type
     }

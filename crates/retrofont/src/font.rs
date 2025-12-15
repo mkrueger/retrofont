@@ -37,6 +37,30 @@ impl Font {
         }
     }
 
+    /// Returns the width and height of a glyph for the given character.
+    pub fn glyph_size(&self, ch: char) -> Option<(usize, usize)> {
+        match self {
+            Font::Figlet(f) => f.glyph(ch).map(|g| (g.width, g.height)),
+            Font::Tdf(f) => f.glyph_size(ch),
+        }
+    }
+
+    /// Returns the maximum height of all glyphs in the font.
+    pub fn max_height(&self) -> usize {
+        match self {
+            Font::Figlet(f) => {
+                let mut max_h = 0;
+                for ch in '!'..='~' {
+                    if let Some(g) = f.glyph(ch) {
+                        max_h = max_h.max(g.height);
+                    }
+                }
+                max_h.max(1)
+            }
+            Font::Tdf(f) => f.max_height(),
+        }
+    }
+
     pub fn render_glyph<T: FontTarget>(
         &self,
         target: &mut T,
