@@ -22,6 +22,7 @@ pub const MAX_TDF_GLYPH_HEIGHT: usize = 12;
 const INVALID_GLYPH: u16 = 0xFFFF;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TdfFontType {
     Outline,
     Block,
@@ -578,3 +579,57 @@ pub static UNICODE_TO_CP437: Lazy<HashMap<char, u8>> = Lazy::new(|| {
     }
     m
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Serde support – serializes TdfFont as compact TDF binary when possible,
+// falls back to materialized glyphs for programmatically built fonts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use super::*;
+    use serde::{de, ser, Deserialize, Deserializer, Serialize, Serializer};
+
+    /// Compact representation: raw TDF bytes.
+    #[derive(Serialize, Deserialize)]
+    struct TdfFontRepr(#[serde(with = "serde_bytes")] Vec<u8>);
+
+    mod serde_bytes {
+        use serde::{Deserialize, Deserializer, Serializer};
+
+        pub fn serialize<S: Serializer>(
+            bytes: &Vec<u8>,
+            s: S,
+        ) -> std::result::Result<S::Ok, S::Error> {
+            s.serialize_bytes(bytes)
+        }
+
+        pub fn deserialize<'de, D: Deserializer<'de>>(
+            d: D,
+        ) -> std::result::Result<Vec<u8>, D::Error> {
+            let bytes: &[u8] = Deserialize::deserialize(d)?;
+            Ok(bytes.to_vec())
+        }
+    }
+
+    impl Serialize for TdfFont {
+        fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+            let tdf_bytes = TdfFont::serialize_bundle(std::slice::from_ref(self))
+                .map_err(ser::Error::custom)?;
+            TdfFontRepr(tdf_bytes).serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for TdfFont {
+        fn deserialize<D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> std::result::Result<Self, D::Error> {
+            let TdfFontRepr(bytes) = TdfFontRepr::deserialize(deserializer)?;
+            let fonts = TdfFont::load(&bytes).map_err(de::Error::custom)?;
+            fonts
+                .into_iter()
+                .next()
+                .ok_or_else(|| de::Error::custom("empty TDF bundle"))
+        }
+    }
+}

@@ -6,6 +6,7 @@ use crate::{
 use crate::tdf::CP437_TO_UNICODE;
 
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RenderOptions {
     pub render_mode: RenderMode,
     pub outline_style: usize,
@@ -25,6 +26,7 @@ impl RenderOptions {
 }
 
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RenderMode {
     #[default]
     Display,
@@ -32,6 +34,7 @@ pub enum RenderMode {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum GlyphPart {
     /// Logical line break (CR in TDF or embedded '\n' in Figlet sources)
     NewLine,
@@ -57,6 +60,7 @@ pub enum GlyphPart {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Glyph {
     /// Maximum width of any rendered line in the glyph
     pub width: usize,
