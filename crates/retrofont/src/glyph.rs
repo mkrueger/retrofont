@@ -199,7 +199,11 @@ impl Glyph {
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::OutlinePlaceholder(b) => {
-                    let ch = transform_outline(outline_style, *b);
+                    let ch = if options.render_mode == RenderMode::Edit {
+                        *b as char
+                    } else {
+                        transform_outline(outline_style, *b)
+                    };
                     target
                         .draw(Cell::new(ch, None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
