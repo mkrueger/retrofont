@@ -34,6 +34,13 @@ pub trait FontTarget {
     fn draw(&mut self, cell: Cell) -> std::result::Result<(), Self::Error>;
     fn next_line(&mut self) -> std::result::Result<(), Self::Error>;
     fn line_width_hint(&mut self, _width: usize) {}
+
+    /// Skip a cell (transparent/empty position).
+    /// Default implementation draws a space. Implementors can override
+    /// to simply advance the cursor without drawing.
+    fn skip(&mut self) -> std::result::Result<(), Self::Error> {
+        self.draw(Cell::new(' ', None, None, false))
+    }
 }
 
 impl From<std::fmt::Error> for FontError {

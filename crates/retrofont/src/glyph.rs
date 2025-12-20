@@ -217,7 +217,7 @@ impl Glyph {
                 }
                 GlyphPart::Skip => {
                     target
-                        .draw(Cell::new(' ', None, None, false))
+                        .skip()
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::Char(c) => {
