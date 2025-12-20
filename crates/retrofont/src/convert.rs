@@ -124,6 +124,10 @@ pub fn figlet_to_tdf(fig: &FigletFont, target_type: TdfFontType) -> Result<TdfFo
                         parts.push(GlyphPart::OutlinePlaceholder(*letter));
                         line_width += 1;
                     }
+                    GlyphPart::Skip => {
+                        parts.push(GlyphPart::Skip);
+                        line_width += 1;
+                    }
                 }
             }
 

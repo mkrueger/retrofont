@@ -368,6 +368,7 @@ impl TdfFont {
                         GlyphPart::FillMarker => glyph_block.push(b'@'),
                         GlyphPart::OutlineHole => glyph_block.push(b'O'),
                         GlyphPart::OutlinePlaceholder(b) => glyph_block.push(*b),
+                        GlyphPart::Skip => glyph_block.push(b' '),
                         GlyphPart::Char(c) => {
                             let mapped = UNICODE_TO_CP437.get(c).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);
@@ -492,6 +493,8 @@ fn decode_glyph(lazy: &LazyGlyphSource, idx: usize) -> Glyph {
                 let blink = (attr & 0x80) != 0;
                 if ch == 0xFF {
                     parts.push(GlyphPart::HardBlank);
+                } else if ch == b' ' {
+                    parts.push(GlyphPart::Skip);
                 } else {
                     let uc = CP437_TO_UNICODE[ch as usize];
                     parts.push(GlyphPart::AnsiChar {
@@ -505,6 +508,8 @@ fn decode_glyph(lazy: &LazyGlyphSource, idx: usize) -> Glyph {
             TdfFontType::Block => {
                 if ch == 0xFF {
                     parts.push(GlyphPart::HardBlank);
+                } else if ch == b' ' {
+                    parts.push(GlyphPart::Skip);
                 } else {
                     parts.push(GlyphPart::Char(CP437_TO_UNICODE[ch as usize]));
                 }
@@ -517,7 +522,7 @@ fn decode_glyph(lazy: &LazyGlyphSource, idx: usize) -> Glyph {
                 } else if (b'A'..=b'R').contains(&ch) {
                     parts.push(GlyphPart::OutlinePlaceholder(ch));
                 } else if ch == b' ' {
-                    parts.push(GlyphPart::Char(' '));
+                    parts.push(GlyphPart::Skip);
                 } else {
                     parts.push(GlyphPart::Char(CP437_TO_UNICODE[ch as usize]));
                 }

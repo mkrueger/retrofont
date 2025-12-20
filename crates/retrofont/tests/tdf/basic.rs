@@ -207,7 +207,7 @@ fn tdf_outline_markers() {
         width: 5,
         height: 1,
         parts: vec![
-            GlyphPart::Char(' '),
+            GlyphPart::Skip,
             GlyphPart::FillMarker,
             GlyphPart::OutlineHole,
             GlyphPart::OutlinePlaceholder(b'A'),

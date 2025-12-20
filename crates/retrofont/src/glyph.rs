@@ -48,7 +48,10 @@ pub enum GlyphPart {
     OutlineHole,
     /// Outline style placeholder letters 'A'.. mapped via pre-converted Unicode outline table
     OutlinePlaceholder(u8),
-    /// Plain Unicode character cell
+    /// Skip/transparent cell - represents a space that should be skipped during rendering.
+    /// Unlike Char(' '), this indicates the cell is empty/transparent rather than a visible space.
+    Skip,
+    /// Plain Unicode character cell (always a visible character, never a space)
     Char(char),
     /// Color font cell with per-cell attributes (foreground/background 0-15)
     AnsiChar {
@@ -210,6 +213,11 @@ impl Glyph {
                     };
                     target
                         .draw(Cell::new(ch, None, None, false))
+                        .map_err(|_| FontError::InvalidGlyph)?;
+                }
+                GlyphPart::Skip => {
+                    target
+                        .draw(Cell::new(' ', None, None, false))
                         .map_err(|_| FontError::InvalidGlyph)?;
                 }
                 GlyphPart::Char(c) => {
