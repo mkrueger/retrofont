@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 use std::sync::Arc;
 
 use crate::{
@@ -171,5 +171,34 @@ impl Font {
         let mut reader = reader;
         reader.read_to_end(&mut buf)?;
         Self::load_owned(buf)
+    }
+
+    /// Write this font to a writer in its native format.
+    pub fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
+        let bytes = self.to_bytes()?;
+        writer.write_all(&bytes)?;
+        Ok(())
+    }
+
+    /// Convert this font to its binary representation.
+    ///
+    /// - TDF fonts are serialized to TDF format (.tdf)
+    /// - FIGlet fonts are serialized to FIGlet format (.flf)
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        match self {
+            Font::Tdf(f) => f.to_bytes(),
+            Font::Figlet(f) => f.to_bytes(),
+        }
+    }
+
+    /// Returns the default file extension for this font type.
+    ///
+    /// - TDF fonts: `"tdf"`
+    /// - FIGlet fonts: `"flf"`
+    pub fn default_extension(&self) -> &'static str {
+        match self {
+            Font::Tdf(_) => "tdf",
+            Font::Figlet(_) => "flf",
+        }
     }
 }

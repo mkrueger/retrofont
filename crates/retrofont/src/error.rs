@@ -55,6 +55,8 @@ pub enum FontError {
     // Format detection
     #[error("unrecognized font format")]
     UnrecognizedFormat,
+    #[error("unsupported format: {0}")]
+    UnsupportedFormat(String),
 
     // Conversion errors
     #[error("FIGlet font is not compatible with TDF conversion")]

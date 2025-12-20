@@ -311,6 +311,106 @@ impl FigletFont {
             .as_ref()
             .is_some_and(|lazy| lazy.glyph_line_start[idx] != u32::MAX)
     }
+
+    /// Serialize this FIGlet font to bytes in .flf format.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+
+        // Determine max height from all glyphs
+        let max_height = self.compute_max_height();
+
+        // Write header line
+        // Format: flf2a<hardblank> height baseline maxlen smush comment_count
+        let comment_count = self.comments.len();
+        let header = format!(
+            "flf2a{} {} {} {} -1 {}\n",
+            self.hard_blank, max_height, max_height, 80, comment_count
+        );
+        out.extend(header.as_bytes());
+
+        // Write comment lines
+        for comment in &self.comments {
+            out.extend(comment.as_bytes());
+            out.push(b'\n');
+        }
+
+        // Write glyphs for ASCII 32-126 (required characters)
+        for ch in 32u8..=126u8 {
+            self.write_glyph_lines(&mut out, ch as char, max_height);
+        }
+
+        // Write glyph for ASCII 127 if present
+        if self.has_char(127 as char) {
+            self.write_glyph_lines(&mut out, 127 as char, max_height);
+        }
+
+        Ok(out)
+    }
+
+    fn compute_max_height(&self) -> usize {
+        let mut max_h = 1usize;
+        for ch in 32u8..=127u8 {
+            if let Some(g) = self.glyph(ch as char) {
+                max_h = max_h.max(g.height);
+            }
+        }
+        max_h
+    }
+
+    fn write_glyph_lines(&self, out: &mut Vec<u8>, ch: char, max_height: usize) {
+        if let Some(glyph) = self.glyph(ch) {
+            // Build lines from glyph parts
+            let mut lines: Vec<String> = Vec::new();
+            let mut current_line = String::new();
+
+            for part in &glyph.parts {
+                match part {
+                    GlyphPart::NewLine => {
+                        lines.push(current_line);
+                        current_line = String::new();
+                    }
+                    GlyphPart::HardBlank => {
+                        current_line.push(self.hard_blank);
+                    }
+                    GlyphPart::Char(c) => {
+                        current_line.push(*c);
+                    }
+                    _ => {
+                        // For other part types, use space as fallback
+                        current_line.push(' ');
+                    }
+                }
+            }
+            // Don't forget the last line if not empty
+            if !current_line.is_empty() || lines.is_empty() {
+                lines.push(current_line);
+            }
+
+            // Pad to max_height if needed
+            while lines.len() < max_height {
+                lines.push(String::new());
+            }
+
+            // Write lines with @ markers
+            for (i, line) in lines.iter().enumerate() {
+                out.extend(line.as_bytes());
+                if i == lines.len() - 1 {
+                    out.extend(b"@@\n"); // Last line gets @@
+                } else {
+                    out.extend(b"@\n");
+                }
+            }
+        } else {
+            // Write empty glyph placeholder
+            for i in 0..max_height {
+                if i == max_height - 1 {
+                    out.extend(b"@@\n");
+                } else {
+                    out.extend(b"@\n");
+                }
+            }
+        }
+    }
 }
 
 fn compute_line_ranges(bytes: &[u8]) -> Vec<Range<usize>> {
