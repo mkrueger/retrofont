@@ -123,7 +123,7 @@ fn main() -> Result<()> {
                 if num > 1 {
                     anyhow::bail!("FIGlet files contain only one font, --num must be 1");
                 }
-                Font::Figlet(FigletFont::load(&bytes)?)
+                Font::Figlet(Box::new(FigletFont::load(&bytes)?))
             } else {
                 let fonts = TdfFont::load(&bytes)?;
                 let font_count = fonts.len();
@@ -137,7 +137,9 @@ fn main() -> Result<()> {
                         font_count
                     );
                 }
-                Font::Tdf(fonts.into_iter().nth(num - 1).unwrap())
+                Font::Tdf(Box::new(fonts.into_iter().nth(num - 1).ok_or_else(
+                    || anyhow::anyhow!("Font #{num} not found in TDF bundle"),
+                )?))
             };
             let ansi = render_to_ansi(&font_enum, &text, &mode)?;
             println!("{ansi}");

@@ -5,9 +5,10 @@
 //! 2. Loads all TDF files using the unified Font API
 //! 3. Cleans up the temp directory
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use retrofont::Font;
 use std::fs;
+use std::hint::black_box;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;

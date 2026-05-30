@@ -112,11 +112,7 @@ impl FigletFont {
             total += g.width;
             count += 1;
         }
-        if count == 0 {
-            None
-        } else {
-            Some(total / count)
-        }
+        total.checked_div(count)
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self> {
@@ -254,11 +250,7 @@ impl FigletFont {
         }
 
         let cache: Arc<[OnceLock<Glyph>; 256]> = Arc::new(std::array::from_fn(|_| OnceLock::new()));
-        let avg_width = if count == 0 {
-            None
-        } else {
-            Some(sum_width / count)
-        };
+        let avg_width = sum_width.checked_div(count);
         font.lazy = Some(LazyFigletSource {
             bytes,
             hard_blank,

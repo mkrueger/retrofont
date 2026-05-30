@@ -35,7 +35,7 @@ fn tdf_round_trip_block_single_glyph() {
     assert_eq!(p.font_type(), TdfFontType::Block);
     // Validate via render
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(p.clone())
+    Font::Tdf(Box::new(p.clone()))
         .render_glyph(&mut target, 'A', &RenderOptions::default())
         .unwrap();
     let lines = lines_to_strings(&target);
@@ -71,7 +71,7 @@ fn tdf_round_trip_color_attributes() {
     assert_eq!(parsed.len(), 1);
     // Validate via render
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(parsed[0].clone())
+    Font::Tdf(Box::new(parsed[0].clone()))
         .render_glyph(&mut target, 'Z', &RenderOptions::default())
         .unwrap();
     assert!(!lines_to_strings(&target).is_empty());
@@ -93,7 +93,7 @@ fn tdf_render_block_multiline() {
     };
     font.add_glyph('X', glyph);
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font.clone())
+    Font::Tdf(Box::new(font.clone()))
         .render_glyph(&mut target, 'X', &RenderOptions::default())
         .unwrap();
     let lines = lines_to_strings(&target);
@@ -115,13 +115,13 @@ fn tdf_render_ampersand_hidden_in_display_visible_in_edit() {
     font.add_glyph('A', glyph);
     // Display mode: & suppressed
     let mut d_target = MemoryBufferTarget::new();
-    Font::Tdf(font.clone())
+    Font::Tdf(Box::new(font.clone()))
         .render_glyph(&mut d_target, 'A', &RenderOptions::default())
         .unwrap();
     assert_eq!(lines_to_strings(&d_target), vec!["AB"]);
     // Edit mode: & present
     let mut e_target = MemoryBufferTarget::new();
-    Font::Tdf(font)
+    Font::Tdf(Box::new(font))
         .render_glyph(&mut e_target, 'A', &RenderOptions::edit())
         .unwrap();
     assert_eq!(lines_to_strings(&e_target), vec!["AB&"]);
@@ -190,7 +190,7 @@ fn tdf_render_color_attribute_nibbles() {
     };
     font.add_glyph('C', glyph);
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font)
+    Font::Tdf(Box::new(font))
         .render_glyph(&mut target, 'C', &RenderOptions::default())
         .unwrap();
     let line = lines_to_strings(&target).pop().unwrap();
@@ -216,7 +216,7 @@ fn tdf_outline_markers() {
     };
     font.add_glyph('A', glyph);
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font)
+    Font::Tdf(Box::new(font))
         .render_glyph(&mut target, 'A', &RenderOptions::default())
         .unwrap();
     let line = lines_to_strings(&target)[0].clone();
@@ -239,7 +239,7 @@ fn tdf_edit_mode_preserves_markers() {
     };
     font.add_glyph('E', glyph);
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font)
+    Font::Tdf(Box::new(font))
         .render_glyph(&mut target, 'E', &RenderOptions::edit())
         .unwrap();
     let line = lines_to_strings(&target)[0].clone();

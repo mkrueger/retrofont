@@ -11,8 +11,8 @@ use crate::{
 /// font operations ergonomic without requiring generics or trait objects when only
 /// supporting built-in formats.
 pub enum Font {
-    Figlet(FigletFont),
-    Tdf(TdfFont),
+    Figlet(Box<FigletFont>),
+    Tdf(Box<TdfFont>),
 }
 
 impl Font {
@@ -125,7 +125,7 @@ impl Font {
         // Attempt FIGlet: header starts with 'flf2a'
         if bytes.len() >= 5 && &bytes[0..5] == b"flf2a" {
             let fig = FigletFont::load(bytes)?;
-            return Ok(vec![Font::Figlet(fig)]);
+            return Ok(vec![Font::Figlet(Box::new(fig))]);
         }
         // Attempt TDF: id length byte (0x13=19) followed by 'TheDraw FONTS file' (18 bytes)
         if bytes.len() >= 19 && bytes[0] == 0x13 && &bytes[1..19] == b"TheDraw FONTS file" {
@@ -133,7 +133,7 @@ impl Font {
             if fonts.is_empty() {
                 return Err(FontError::TdfEmptyBundle);
             }
-            return Ok(fonts.into_iter().map(Font::Tdf).collect());
+            return Ok(fonts.into_iter().map(|f| Font::Tdf(Box::new(f))).collect());
         }
         Err(FontError::UnrecognizedFormat)
     }
@@ -151,7 +151,7 @@ impl Font {
         // Attempt FIGlet: header starts with 'flf2a'
         if b.len() >= 5 && &b[0..5] == b"flf2a" {
             let fig = FigletFont::load_arc(bytes)?;
-            return Ok(vec![Font::Figlet(fig)]);
+            return Ok(vec![Font::Figlet(Box::new(fig))]);
         }
 
         // Attempt TDF: id length byte (0x13=19) followed by 'TheDraw FONTS file' (18 bytes)
@@ -160,7 +160,7 @@ impl Font {
             if fonts.is_empty() {
                 return Err(FontError::TdfEmptyBundle);
             }
-            return Ok(fonts.into_iter().map(Font::Tdf).collect());
+            return Ok(fonts.into_iter().map(|f| Font::Tdf(Box::new(f))).collect());
         }
 
         Err(FontError::UnrecognizedFormat)

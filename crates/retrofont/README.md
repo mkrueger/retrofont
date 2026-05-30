@@ -145,7 +145,7 @@ fn handle_bundle() -> retrofont::Result<()> {
     // Create a new bundle
     if let Font::Tdf(tdf1) = &fonts[0] {
         if let Font::Tdf(tdf2) = &fonts[1] {
-            let bundle = TdfFont::create_bundle(&[tdf1.clone(), tdf2.clone()])?;
+            let bundle = TdfFont::create_bundle(&[(**tdf1).clone(), (**tdf2).clone()])?;
             std::fs::write("new_bundle.tdf", bundle)?;
         }
     }

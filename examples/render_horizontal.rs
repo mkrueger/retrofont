@@ -57,7 +57,7 @@ fn main() {
     font.add_raw_char(b'H', &["HH  HH", "HH  HH", "HHHHHH", "HH  HH", "HH  HH"]);
     font.add_raw_char(b'i', &["  ii  ", "      ", "  ii  ", "  ii  ", "  ii  "]);
 
-    let font_enum = Font::Figlet(font);
+    let font_enum = Font::Figlet(Box::new(font));
     let mut renderer = SimpleRenderer::new();
 
     // Render "Hi" horizontally

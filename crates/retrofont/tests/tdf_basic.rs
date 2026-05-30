@@ -34,7 +34,7 @@ fn tdf_round_trip_block_single_glyph() {
     assert_eq!(p.font_type(), TdfFontType::Block);
     // Validate via render
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(p.clone())
+    Font::Tdf(Box::new(p.clone()))
         .render_glyph(&mut target, 'A', &RenderOptions::default())
         .unwrap();
     let line0: String = target.lines[0].iter().map(|c| c.ch).collect();
@@ -70,7 +70,7 @@ fn tdf_round_trip_color_attributes() {
     let bytes = font.to_bytes().unwrap();
     let parsed = TdfFont::load(&bytes).unwrap();
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(parsed[0].clone())
+    Font::Tdf(Box::new(parsed[0].clone()))
         .render_glyph(&mut target, 'Z', &RenderOptions::edit())
         .unwrap();
     // Expect only 'A' then newline then 'B' because '&' suppressed in display and edit currently for Color
@@ -98,7 +98,7 @@ fn tdf_render_block_multiline() {
         },
     );
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font.clone())
+    Font::Tdf(Box::new(font.clone()))
         .render_glyph(&mut target, 'X', &RenderOptions::default())
         .unwrap();
     assert_eq!(lines(&target), vec!["XY", "ZW"]);
@@ -120,12 +120,12 @@ fn tdf_ampersand_hidden_display_visible_edit() {
         },
     );
     let mut d = MemoryBufferTarget::new();
-    Font::Tdf(font.clone())
+    Font::Tdf(Box::new(font.clone()))
         .render_glyph(&mut d, 'A', &RenderOptions::default())
         .unwrap();
     assert_eq!(lines(&d), vec!["AB"]);
     let mut e = MemoryBufferTarget::new();
-    Font::Tdf(font)
+    Font::Tdf(Box::new(font))
         .render_glyph(&mut e, 'A', &RenderOptions::edit())
         .unwrap();
     assert_eq!(lines(&e), vec!["AB&"]);
@@ -198,7 +198,7 @@ fn tdf_render_color_attribute_nibbles() {
         },
     );
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font.clone())
+    Font::Tdf(Box::new(font.clone()))
         .render_glyph(&mut target, 'C', &RenderOptions::default())
         .unwrap();
     let line = lines(&target)[0].clone();
@@ -224,7 +224,7 @@ fn tdf_edit_mode_preserves_markers() {
         },
     );
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font.clone())
+    Font::Tdf(Box::new(font.clone()))
         .render_glyph(&mut target, 'E', &RenderOptions::edit())
         .unwrap();
     // Edit mode shows special markers: '@' for FillMarker, 'O' for OutlineHole, '&' for EndMarker
@@ -249,7 +249,7 @@ fn tdf_outline_uses_unicode_box_chars() {
         },
     );
     let mut target = MemoryBufferTarget::new();
-    Font::Tdf(font)
+    Font::Tdf(Box::new(font))
         .render_glyph(&mut target, 'U', &RenderOptions::default())
         .unwrap();
     assert_eq!(lines(&target)[0], "──│");

@@ -250,10 +250,10 @@ impl TdfFont {
             let mut lookup: [u16; CHAR_TABLE_SIZE] = [0u16; CHAR_TABLE_SIZE];
             // We did one bounds check above; now do unchecked reads in the hot loop.
             unsafe {
-                for i in 0..CHAR_TABLE_SIZE {
+                for slot in lookup.iter_mut() {
                     let lo = *b.get_unchecked(o);
                     let hi = *b.get_unchecked(o + 1);
-                    lookup[i] = u16::from_le_bytes([lo, hi]);
+                    *slot = u16::from_le_bytes([lo, hi]);
                     o += 2;
                 }
             }
@@ -603,7 +603,7 @@ mod serde_impl {
         use serde::{Deserialize, Deserializer, Serializer};
 
         pub fn serialize<S: Serializer>(
-            bytes: &Vec<u8>,
+            bytes: &[u8],
             s: S,
         ) -> std::result::Result<S::Ok, S::Error> {
             s.serialize_bytes(bytes)
