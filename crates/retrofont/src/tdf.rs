@@ -21,6 +21,13 @@ pub const MAX_TDF_GLYPH_WIDTH: usize = 30;
 pub const MAX_TDF_GLYPH_HEIGHT: usize = 12;
 const INVALID_GLYPH: u16 = 0xFFFF;
 
+/// Glyph dimensions are stored as single bytes.
+const MAX_ENCODABLE_GLYPH_DIM: usize = u8::MAX as usize;
+/// The glyph block length is stored as a little-endian `u16`.
+const MAX_GLYPH_BLOCK_SIZE: usize = u16::MAX as usize;
+/// Offsets share their encoding with `INVALID_GLYPH`, which must stay unambiguous.
+const MAX_GLYPH_OFFSET: usize = INVALID_GLYPH as usize - 1;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TdfFontType {
@@ -350,14 +357,33 @@ impl TdfFont {
             TdfFontType::Color => 2,
         };
         out.push(type_byte);
-        out.push(self.spacing as u8);
+        let spacing = u8::try_from(self.spacing).map_err(|_| FontError::TdfSpacingOutOfRange {
+            spacing: self.spacing,
+            max: u8::MAX,
+        })?;
+        out.push(spacing);
         // build lookup + glyph data
         let mut lookup = Vec::new();
         let mut glyph_block = Vec::new();
         for i in 0..CHAR_TABLE_SIZE {
             let ch = tdf_char(i);
             if let Some(g) = self.glyph(ch) {
-                lookup.extend(u16::to_le_bytes(glyph_block.len() as u16));
+                let offset = glyph_block.len();
+                if offset > MAX_GLYPH_OFFSET {
+                    return Err(FontError::TdfGlyphBlockTooLarge {
+                        size: offset,
+                        max: MAX_GLYPH_OFFSET,
+                    });
+                }
+                if g.width > MAX_ENCODABLE_GLYPH_DIM || g.height > MAX_ENCODABLE_GLYPH_DIM {
+                    return Err(FontError::TdfGlyphTooLarge {
+                        ch,
+                        width: g.width,
+                        height: g.height,
+                        max: MAX_ENCODABLE_GLYPH_DIM,
+                    });
+                }
+                lookup.extend(u16::to_le_bytes(offset as u16));
                 glyph_block.push(g.width as u8);
                 glyph_block.push(g.height as u8);
                 for part in &g.parts {
@@ -386,6 +412,12 @@ impl TdfFont {
             } else {
                 lookup.extend(u16::to_le_bytes(INVALID_GLYPH));
             }
+        }
+        if glyph_block.len() > MAX_GLYPH_BLOCK_SIZE {
+            return Err(FontError::TdfGlyphBlockTooLarge {
+                size: glyph_block.len(),
+                max: MAX_GLYPH_BLOCK_SIZE,
+            });
         }
         out.extend(u16::to_le_bytes(glyph_block.len() as u16));
         out.extend(lookup);

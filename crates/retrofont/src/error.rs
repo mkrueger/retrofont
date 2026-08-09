@@ -51,6 +51,17 @@ pub enum FontError {
     TdfEmptyBundle,
     #[error("TDF: name too long ({len} bytes, max {max})")]
     TdfNameTooLong { len: usize, max: usize },
+    #[error("TDF: glyph data too large ({size} bytes, max {max})")]
+    TdfGlyphBlockTooLarge { size: usize, max: usize },
+    #[error("TDF: glyph '{ch}' is {width}x{height}, exceeding the maximum of {max}x{max}")]
+    TdfGlyphTooLarge {
+        ch: char,
+        width: usize,
+        height: usize,
+        max: usize,
+    },
+    #[error("TDF: spacing {spacing} out of range (0..={max})")]
+    TdfSpacingOutOfRange { spacing: i32, max: u8 },
 
     // Format detection
     #[error("unrecognized font format")]
