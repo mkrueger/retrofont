@@ -1,5 +1,6 @@
 //! retrofont: retro terminal font toolkit.
 //! Features: TDF parsing/rendering, FIGlet placeholder, conversion stubs.
+#![forbid(unsafe_code)]
 
 pub mod convert;
 mod error;

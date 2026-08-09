@@ -255,15 +255,11 @@ impl TdfFont {
                 });
             }
             let mut lookup: [u16; CHAR_TABLE_SIZE] = [0u16; CHAR_TABLE_SIZE];
-            // We did one bounds check above; now do unchecked reads in the hot loop.
-            unsafe {
-                for slot in lookup.iter_mut() {
-                    let lo = *b.get_unchecked(o);
-                    let hi = *b.get_unchecked(o + 1);
-                    *slot = u16::from_le_bytes([lo, hi]);
-                    o += 2;
-                }
+            let table = &b[o..o + CHAR_TABLE_SIZE * 2];
+            for (slot, entry) in lookup.iter_mut().zip(table.chunks_exact(2)) {
+                *slot = u16::from_le_bytes([entry[0], entry[1]]);
             }
+            o += CHAR_TABLE_SIZE * 2;
             if o + block_size > b.len() {
                 return Err(FontError::TdfTruncated {
                     field: "glyph block",
@@ -493,13 +489,13 @@ fn decode_glyph(lazy: &LazyGlyphSource, idx: usize) -> Glyph {
         };
     }
 
-    let width = unsafe { *b.get_unchecked(p) as usize };
-    let height = unsafe { *b.get_unchecked(p + 1) as usize };
+    let width = b[p] as usize;
+    let height = b[p + 1] as usize;
     p += 2;
 
     let mut parts = Vec::with_capacity(width.saturating_mul(height).saturating_add(height));
     while p < lazy.glyph_block_end {
-        let ch = unsafe { *b.get_unchecked(p) };
+        let ch = b[p];
         p += 1;
         if ch == 0 {
             break;
@@ -518,7 +514,7 @@ fn decode_glyph(lazy: &LazyGlyphSource, idx: usize) -> Glyph {
                 if p >= lazy.glyph_block_end {
                     break;
                 }
-                let attr = unsafe { *b.get_unchecked(p) };
+                let attr = b[p];
                 p += 1;
                 let fg = attr & 0x0F;
                 let bg = (attr >> 4) & 0x07;

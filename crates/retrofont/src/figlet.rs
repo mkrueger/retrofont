@@ -468,7 +468,9 @@ fn decode_glyph(lazy: &LazyFigletSource, idx: usize) -> Glyph {
             parts.push(GlyphPart::NewLine);
         }
         let r = &lazy.glyph_lines[start + row];
-        let s = unsafe { std::str::from_utf8_unchecked(&lazy.bytes[r.clone()]) };
+        // Lines are split on '\n', which never occurs inside a multi-byte sequence,
+        // and the whole buffer was validated at parse time.
+        let s = std::str::from_utf8(&lazy.bytes[r.clone()]).unwrap_or("");
         let mut line_width = 0usize;
         for ch in s.chars() {
             if ch == lazy.hard_blank {
