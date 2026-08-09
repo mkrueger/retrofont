@@ -1,7 +1,7 @@
 use retrofont::{
+    Font, Glyph, GlyphPart, RenderOptions,
     tdf::{TdfFont, TdfFontType},
     test_support::MemoryBufferTarget,
-    Font, Glyph, GlyphPart, RenderOptions,
 };
 
 fn lines(buf: &MemoryBufferTarget) -> Vec<String> {

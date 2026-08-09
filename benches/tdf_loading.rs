@@ -5,7 +5,7 @@
 //! 2. Loads all TDF files using the unified Font API
 //! 3. Cleans up the temp directory
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use retrofont::Font;
 use std::fs;
 use std::hint::black_box;
@@ -81,10 +81,10 @@ fn collect_tdf_files(dir: &PathBuf) -> Vec<PathBuf> {
                 let path = entry.path();
                 if path.is_dir() {
                     visit_dir(&path, files);
-                } else if let Some(ext) = path.extension() {
-                    if ext.eq_ignore_ascii_case("tdf") {
-                        files.push(path);
-                    }
+                } else if let Some(ext) = path.extension()
+                    && ext.eq_ignore_ascii_case("tdf")
+                {
+                    files.push(path);
                 }
             }
         }
@@ -100,11 +100,11 @@ fn load_all_tdf_files(files: &[PathBuf]) -> (usize, usize) {
     let mut total_fonts = 0;
 
     for path in files {
-        if let Ok(bytes) = fs::read(path) {
-            if let Ok(fonts) = Font::load_owned(bytes) {
-                total_files += 1;
-                total_fonts += fonts.len();
-            }
+        if let Ok(bytes) = fs::read(path)
+            && let Ok(fonts) = Font::load_owned(bytes)
+        {
+            total_files += 1;
+            total_fonts += fonts.len();
         }
     }
 

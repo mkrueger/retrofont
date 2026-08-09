@@ -1,8 +1,8 @@
 //! Serialization must reject fonts that cannot be encoded, rather than
 //! silently truncating offsets and producing unreadable files.
 use retrofont::{
-    tdf::{TdfFont, TdfFontType},
     FontError, Glyph, GlyphPart,
+    tdf::{TdfFont, TdfFontType},
 };
 
 fn color_glyph(width: usize, height: usize) -> Glyph {

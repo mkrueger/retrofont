@@ -1,10 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use retrofont::{
+    Font, RenderOptions,
     convert::figlet_to_tdf,
     figlet::FigletFont,
     tdf::{TdfFont, TdfFontType},
-    Font, RenderOptions,
 };
 use std::fs;
 

@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 
 use crate::{
-    figlet::FigletFont, glyph::RenderOptions, tdf::TdfFont, FontError, FontTarget, Result,
+    FontError, FontTarget, Result, figlet::FigletFont, glyph::RenderOptions, tdf::TdfFont,
 };
 
 /// Unified font enum encapsulating all supported font kinds.
@@ -76,7 +76,7 @@ impl Font {
             for _ in 0..space_width {
                 target
                     .draw(crate::Cell::new(' ', None, None, false))
-                    .map_err(|_| FontError::InvalidGlyph)?;
+                    .map_err(|e| FontError::Target(e.to_string()))?;
             }
             return Ok(());
         }

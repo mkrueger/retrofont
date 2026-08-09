@@ -1,6 +1,6 @@
 use retrofont::{
-    tdf::{TdfFont, TdfFontType},
     Glyph, GlyphPart,
+    tdf::{TdfFont, TdfFontType},
 };
 
 #[test]

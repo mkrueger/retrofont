@@ -1,4 +1,4 @@
-use retrofont::{figlet::FigletFont, test_support::MemoryBufferTarget, Font, RenderOptions};
+use retrofont::{Font, RenderOptions, figlet::FigletFont, test_support::MemoryBufferTarget};
 
 fn lines(buf: &MemoryBufferTarget) -> Vec<String> {
     buf.lines

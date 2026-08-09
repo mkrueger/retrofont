@@ -1,6 +1,6 @@
 use crate::{
-    error::{FontError, Result},
     Cell, FontTarget,
+    error::{FontError, Result},
 };
 // Use CP437 to Unicode mapping from TDF module for consistent Unicode output
 use crate::tdf::CP437_TO_UNICODE;
@@ -163,16 +163,19 @@ impl Glyph {
     /// Display mode hides them, treating them largely as spaces.
     pub fn render<T: FontTarget>(&self, target: &mut T, options: &RenderOptions) -> Result<()> {
         let outline_style = options.outline_style;
+        fn target_err<E: std::fmt::Display>(e: E) -> FontError {
+            FontError::Target(e.to_string())
+        }
         for part in &self.parts {
             match part {
                 GlyphPart::NewLine => {
-                    target.next_line().map_err(|_| FontError::InvalidGlyph)?;
+                    target.next_line().map_err(target_err)?;
                 }
                 GlyphPart::EndMarker => {
                     if options.render_mode == RenderMode::Edit {
                         target
                             .draw(Cell::new('&', None, None, false))
-                            .map_err(|_| FontError::InvalidGlyph)?;
+                            .map_err(target_err)?;
                     }
                 }
                 GlyphPart::HardBlank => {
@@ -183,7 +186,7 @@ impl Glyph {
                     };
                     target
                         .draw(Cell::new(ch, None, None, false))
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                        .map_err(target_err)?;
                 }
                 GlyphPart::FillMarker => {
                     let ch = if options.render_mode == RenderMode::Edit {
@@ -193,7 +196,7 @@ impl Glyph {
                     };
                     target
                         .draw(Cell::new(ch, None, None, false))
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                        .map_err(target_err)?;
                 }
                 GlyphPart::OutlineHole => {
                     let ch = if options.render_mode == RenderMode::Edit {
@@ -203,7 +206,7 @@ impl Glyph {
                     };
                     target
                         .draw(Cell::new(ch, None, None, false))
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                        .map_err(target_err)?;
                 }
                 GlyphPart::OutlinePlaceholder(b) => {
                     let ch = if options.render_mode == RenderMode::Edit {
@@ -213,22 +216,20 @@ impl Glyph {
                     };
                     target
                         .draw(Cell::new(ch, None, None, false))
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                        .map_err(target_err)?;
                 }
                 GlyphPart::Skip => {
-                    target
-                        .skip()
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                    target.skip().map_err(target_err)?;
                 }
                 GlyphPart::Char(c) => {
                     target
                         .draw(Cell::new(*c, None, None, false))
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                        .map_err(target_err)?;
                 }
                 GlyphPart::AnsiChar { ch, fg, bg, blink } => {
                     target
                         .draw(Cell::new(*ch, Some(*fg), Some(*bg), *blink))
-                        .map_err(|_| FontError::InvalidGlyph)?;
+                        .map_err(target_err)?;
                 }
             }
         }

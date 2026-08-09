@@ -123,10 +123,10 @@ impl TdfFont {
                 count += 1;
                 continue;
             }
-            if let Some(lazy) = &self.lazy {
-                if lazy.lookup[i] != INVALID_GLYPH {
-                    count += 1;
-                }
+            if let Some(lazy) = &self.lazy
+                && lazy.lookup[i] != INVALID_GLYPH
+            {
+                count += 1;
             }
         }
         count
@@ -593,7 +593,7 @@ pub static UNICODE_TO_CP437: Lazy<HashMap<char, u8>> = Lazy::new(|| {
 #[cfg(feature = "serde")]
 mod serde_impl {
     use super::*;
-    use serde::{de, ser, Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser};
 
     /// Compact representation: raw TDF bytes.
     #[derive(Serialize, Deserialize)]

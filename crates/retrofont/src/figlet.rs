@@ -87,10 +87,10 @@ impl FigletFont {
                 count += 1;
                 continue;
             }
-            if let Some(lazy) = &self.lazy {
-                if lazy.glyph_line_start[i] != u32::MAX {
-                    count += 1;
-                }
+            if let Some(lazy) = &self.lazy
+                && lazy.glyph_line_start[i] != u32::MAX
+            {
+                count += 1;
             }
         }
         count
@@ -100,10 +100,10 @@ impl FigletFont {
     /// Returns None if no glyphs are defined.
     pub(crate) fn spacing(&self) -> Option<usize> {
         // Prefer the precomputed hint for parsed fonts.
-        if let Some(lazy) = &self.lazy {
-            if lazy.avg_width.is_some() {
-                return lazy.avg_width;
-            }
+        if let Some(lazy) = &self.lazy
+            && lazy.avg_width.is_some()
+        {
+            return lazy.avg_width;
         }
         // Fallback: compute from overlay glyphs.
         let mut total = 0usize;

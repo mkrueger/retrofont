@@ -6,13 +6,14 @@ mod error;
 pub mod figlet;
 mod font;
 mod glyph;
-pub use glyph::{transform_outline, OUTLINE_CHAR_SET_UNICODE};
+pub use glyph::{OUTLINE_CHAR_SET_UNICODE, transform_outline};
 pub mod tdf;
 pub use error::{FontError, Result};
 pub use font::Font;
 pub use glyph::{Glyph, GlyphPart, RenderMode, RenderOptions};
 
 // Test utilities
+#[cfg(feature = "test-support")]
 pub mod test_support;
 
 #[derive(Clone, Copy, Debug)]
@@ -30,7 +31,8 @@ impl Cell {
 }
 
 pub trait FontTarget {
-    type Error;
+    /// Reported through [`FontError::Target`] when rendering fails.
+    type Error: std::fmt::Display;
     fn draw(&mut self, cell: Cell) -> std::result::Result<(), Self::Error>;
     fn next_line(&mut self) -> std::result::Result<(), Self::Error>;
     fn line_width_hint(&mut self, _width: usize) {}
@@ -44,7 +46,7 @@ pub trait FontTarget {
 }
 
 impl From<std::fmt::Error> for FontError {
-    fn from(_: std::fmt::Error) -> Self {
-        FontError::InvalidGlyph
+    fn from(e: std::fmt::Error) -> Self {
+        FontError::Target(e.to_string())
     }
 }

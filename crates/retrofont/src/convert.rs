@@ -3,7 +3,7 @@ use crate::{
     error::{FontError, Result},
     figlet::FigletFont,
     glyph::{Glyph, GlyphPart},
-    tdf::{TdfFont, TdfFontType, MAX_TDF_GLYPH_HEIGHT, MAX_TDF_GLYPH_WIDTH},
+    tdf::{MAX_TDF_GLYPH_HEIGHT, MAX_TDF_GLYPH_WIDTH, TdfFont, TdfFontType},
 };
 
 /// TDF supports printable ASCII range: '!' (0x21) through '~' (0x7E) = 94 characters

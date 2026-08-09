@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum FontError {
     // IO errors
     #[error("IO error: {0}")]
@@ -80,6 +81,8 @@ pub enum FontError {
     InvalidGlyph,
     #[error("unknown character: {0}")]
     UnknownChar(char),
+    #[error("render target error: {0}")]
+    Target(String),
 
     // UTF-8 errors
     #[error("UTF-8 error: {0}")]

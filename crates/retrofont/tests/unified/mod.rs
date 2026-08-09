@@ -1,6 +1,6 @@
 //! Tests using the unified Font API
 
-use retrofont::{test_support::MemoryBufferTarget, Font, RenderOptions};
+use retrofont::{Font, RenderOptions, test_support::MemoryBufferTarget};
 
 const ZETRAX_TDF: &[u8] = include_bytes!("ZETRAX.TDF");
 
