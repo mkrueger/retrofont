@@ -1,5 +1,4 @@
-//! retrofont: retro terminal font toolkit.
-//! Features: TDF parsing/rendering, FIGlet placeholder, conversion stubs.
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
 pub mod convert;

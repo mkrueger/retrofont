@@ -1,4 +1,4 @@
-//! Conversion stubs (FIGlet -> TDF)
+//! Font conversion (FIGlet -> TDF)
 use crate::{
     error::{FontError, Result},
     figlet::FigletFont,

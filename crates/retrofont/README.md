@@ -5,7 +5,7 @@ A Rust library for parsing, rendering, and converting retro ASCII/ANSI art fonts
 ## Features
 
 - 🎨 **Multiple Font Formats**: Parse and render both FIGlet (.flf) and TheDraw (.tdf) fonts
-- 🔄 **Format Conversion**: Convert between FIGlet and TDF formats with compatibility checking
+- 🔄 **Format Conversion**: Convert FIGlet fonts to TDF with compatibility checking
 - 🌍 **Unicode Support**: Automatic CP437 to Unicode conversion with proper character mapping
 - 🎭 **Rendering Modes**: Display mode for final output, Edit mode for font development
 - 📦 **Bundle Support**: Handle TDF files containing multiple fonts
@@ -19,42 +19,45 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-retrofont = "0.1.2"
+retrofont = "0.2"
 ```
 
 ## Quick Start
 
-```rust
-use retrofont::{Font, RenderOptions, test_support::BufferTarget};
+```rust,no_run
+use retrofont::{test_support::MemoryBufferTarget, Font, RenderOptions};
 
 fn main() -> retrofont::Result<()> {
     // Load a font (auto-detects format)
     let data = std::fs::read("fonts/doom.flf")?;
-    let fonts = Font::from_bytes(&data)?;
-    let font = &fonts[0];  // FIGlet returns one font, TDF can have multiple
-    
+    let fonts = Font::load(&data)?;
+    let font = &fonts[0]; // FIGlet returns one font, TDF can have multiple
+
     // Create a rendering target
-    let mut target = BufferTarget::new();
+    let mut target = MemoryBufferTarget::new();
     let options = RenderOptions::default();
-    
-    // Render text character by character
+
+    // Render text one character at a time
     for ch in "HELLO".chars() {
-        font.render_char(&mut target, ch, &options)?;
-        target.next_char();  // Advance to next character position
+        font.render_glyph(&mut target, ch, &options)?;
     }
-    
-    // Get the result
-    println!("{}", target.to_string());
+
+    // Inspect the result
+    for line in &target.lines {
+        let text: String = line.iter().map(|cell| cell.ch).collect();
+        println!("{text}");
+    }
     Ok(())
 }
 ```
 
 ## Implementing Custom Render Targets
 
-Create your own output format by implementing the `FontTarget` trait:
+Create your own output format by implementing the `FontTarget` trait. Only
+`draw` and `next_line` are required.
 
 ```rust
-use retrofont::{FontTarget, Cell};
+use retrofont::{Cell, FontTarget};
 use std::fmt;
 
 struct HtmlTarget {
@@ -63,29 +66,26 @@ struct HtmlTarget {
 
 impl FontTarget for HtmlTarget {
     type Error = fmt::Error;
-    
+
     fn draw(&mut self, cell: Cell) -> Result<(), Self::Error> {
         // Escape HTML characters
-        let ch = match cell.ch {
-            '<' => "&lt;",
-            '>' => "&gt;",
-            '&' => "&amp;",
-            c => {
-                self.html.push(c);
-                return Ok(());
-            }
-        };
-        self.html.push_str(ch);
+        match cell.ch {
+            '<' => self.html.push_str("&lt;"),
+            '>' => self.html.push_str("&gt;"),
+            '&' => self.html.push_str("&amp;"),
+            c => self.html.push(c),
+        }
         Ok(())
     }
-    
+
     fn next_line(&mut self) -> Result<(), Self::Error> {
         self.html.push_str("<br>\n");
         Ok(())
     }
-    
-    fn next_char(&mut self) -> Result<(), Self::Error> {
-        // Optional: Handle character spacing
+
+    // Optional: transparent cells advance without drawing.
+    fn skip(&mut self) -> Result<(), Self::Error> {
+        self.html.push(' ');
         Ok(())
     }
 }
@@ -95,25 +95,25 @@ impl FontTarget for HtmlTarget {
 
 Convert FIGlet fonts to TheDraw format:
 
-```rust
+```rust,no_run
 use retrofont::{
+    convert::{can_convert_figlet_to_tdf, figlet_to_tdf},
     figlet::FigletFont,
     tdf::TdfFontType,
-    convert::{convert_to_tdf, is_figlet_compatible_with_tdf}
 };
 
 fn convert_font() -> retrofont::Result<()> {
     // Load FIGlet font
     let data = std::fs::read("input.flf")?;
-    let figlet = FigletFont::from_bytes(&data)?;
-    
+    let figlet = FigletFont::load(&data)?;
+
     // Check compatibility
-    if is_figlet_compatible_with_tdf(&figlet, TdfFontType::Block) {
+    if can_convert_figlet_to_tdf(&figlet, TdfFontType::Block) {
         // Convert to TDF
-        let tdf = convert_to_tdf(&figlet, TdfFontType::Block)?;
-        
+        let tdf = figlet_to_tdf(&figlet, TdfFontType::Block)?;
+
         // Serialize to bytes
-        let tdf_bytes = tdf.as_tdf_bytes()?;
+        let tdf_bytes = tdf.to_bytes()?;
         std::fs::write("output.tdf", tdf_bytes)?;
     }
     Ok(())
@@ -122,34 +122,37 @@ fn convert_font() -> retrofont::Result<()> {
 
 ## Working with TDF Bundles
 
-```rust
-use retrofont::{Font, tdf::TdfFont};
+```rust,no_run
+use retrofont::{tdf::TdfFont, test_support::MemoryBufferTarget, Font, RenderOptions};
 
 fn handle_bundle() -> retrofont::Result<()> {
     // Load a TDF bundle (multiple fonts)
     let data = std::fs::read("bundle.tdf")?;
-    let fonts = Font::from_bytes(&data)?;
-    
+    let fonts = Font::load(&data)?;
+
     // Iterate through fonts
     for (i, font) in fonts.iter().enumerate() {
         println!("Font {}: {}", i, font.name());
-        
+
         // Check character availability
         if font.has_char('A') {
             // Render specific character
-            let mut target = BufferTarget::new();
-            font.render_char(&mut target, 'A', &RenderOptions::default())?;
+            let mut target = MemoryBufferTarget::new();
+            font.render_glyph(&mut target, 'A', &RenderOptions::default())?;
         }
     }
-    
-    // Create a new bundle
-    if let Font::Tdf(tdf1) = &fonts[0] {
-        if let Font::Tdf(tdf2) = &fonts[1] {
-            let bundle = TdfFont::create_bundle(&[(**tdf1).clone(), (**tdf2).clone()])?;
-            std::fs::write("new_bundle.tdf", bundle)?;
-        }
-    }
-    
+
+    // Write a new bundle containing every TDF font that was loaded
+    let tdf_fonts: Vec<TdfFont> = fonts
+        .iter()
+        .filter_map(|f| match f {
+            Font::Tdf(tdf) => Some((**tdf).clone()),
+            _ => None,
+        })
+        .collect();
+    let bundle = TdfFont::serialize_bundle(&tdf_fonts)?;
+    std::fs::write("new_bundle.tdf", bundle)?;
+
     Ok(())
 }
 ```
@@ -159,7 +162,7 @@ fn handle_bundle() -> retrofont::Result<()> {
 Control rendering behavior with `RenderOptions`:
 
 ```rust
-use retrofont::{RenderOptions, RenderMode};
+use retrofont::{RenderMode, RenderOptions};
 
 // Default: Display mode
 let opts = RenderOptions::default();
@@ -179,14 +182,16 @@ let opts = RenderOptions {
 Load fonts from any `Read` source:
 
 ```rust
-use std::io::Cursor;
 use retrofont::Font;
+use std::io::Cursor;
 
 fn load_from_memory(data: Vec<u8>) -> retrofont::Result<Vec<Font>> {
-    let cursor = Cursor::new(data);
-    Font::from_reader(cursor)
+    Font::read(Cursor::new(data))
 }
 ```
+
+For zero-copy loading of an owned buffer, use `Font::load_owned` or
+`Font::load_arc`, which let TDF glyphs decode lazily from the original bytes.
 
 ## Font Types
 
@@ -209,16 +214,16 @@ fn load_from_memory(data: Vec<u8>) -> retrofont::Result<Vec<Font>> {
 
 ## Cell Attributes
 
-Each rendered cell contains:
+Each rendered cell carries the character plus its DOS attributes:
 
 ```rust
-pub struct Cell {
-    pub ch: char,           // Unicode character
-    pub fg: Option<u8>,     // Foreground color (0-15)
-    pub bg: Option<u8>,     // Background color (0-15)
-    pub blink: bool,        // Blink attribute
-    pub bold: bool,         // Bold attribute (future use)
-}
+use retrofont::Cell;
+
+let cell = Cell::new('A', Some(7), Some(0), false);
+assert_eq!(cell.ch, 'A'); // Unicode character
+assert_eq!(cell.fg, Some(7)); // Foreground color (0-15)
+assert_eq!(cell.bg, Some(0)); // Background color (0-15)
+assert!(!cell.blink); // Blink attribute
 ```
 
 ## Error Handling
@@ -226,11 +231,11 @@ pub struct Cell {
 The library uses a `Result<T>` type alias with `FontError`:
 
 ```rust
-use retrofont::{Font, FontError, Result};
+use retrofont::{Font, Result};
 
 fn load_font(path: &str) -> Result<Vec<Font>> {
-    let data = std::fs::read(path)?;  // IO errors auto-convert via From
-    Font::from_bytes(&data)
+    let data = std::fs::read(path)?; // IO errors auto-convert via From
+    Font::load(&data)
 }
 ```
 
@@ -238,22 +243,23 @@ fn load_font(path: &str) -> Result<Vec<Font>> {
 
 ```toml
 [dependencies]
-retrofont = { version = "0.1.2", default-features = false, features = ["tdf"] }
+retrofont = { version = "0.2", default-features = false, features = ["tdf"] }
 ```
 
 Available features:
 
 - `tdf`: TheDraw font support (default)
 - `figlet`: FIGlet font support (default)
-- `convert`: Font conversion utilities (default)
-- `color`: Color rendering support (default)
+- `convert`: Font conversion utilities (default, implies `tdf` and `figlet`)
+- `color`: Color rendering support
+- `serde`: `Serialize`/`Deserialize` support for glyph and render types
 
 ## Performance Considerations
 
-- Glyphs stored in `HashMap<char, Glyph>` for memory efficiency
-- Stream-based loading available via `from_reader()`
-- Pre-rendered glyphs cached per font
-- Optimized for repeated rendering of the same characters
+- Glyphs are held in fixed-size tables indexed by character code, avoiding hashing
+- Parsed glyphs decode lazily on first access and are cached per font
+- `load_arc` shares the source buffer, so bundles decode without copying glyph data
+- Stream-based loading available via `Font::read`
 
 ## License
 

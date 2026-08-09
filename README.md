@@ -7,7 +7,7 @@ A Rust library and CLI toolkit for working with retro ASCII/ANSI art fonts, supp
 ## Features
 
 - 🎨 **Multiple Font Formats**: Parse and render both FIGlet (.flf) and TheDraw (.tdf) fonts
-- 🔄 **Format Conversion**: Convert between FIGlet and TDF formats with compatibility checking
+- 🔄 **Format Conversion**: Convert FIGlet fonts to TDF with compatibility checking
 - 🌍 **Unicode Support**: Automatic CP437 to Unicode conversion with proper character mapping
 - 🎭 **Rendering Modes**: Display mode for final output, Edit mode for font development
 - 📦 **Bundle Support**: Handle TDF files containing multiple fonts
@@ -21,7 +21,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-retrofont = "0.1"
+retrofont = "0.2"
 ```
 
 For CLI usage:
@@ -47,7 +47,6 @@ retrofont render --font fonts/outline.tdf --text "Style" --outline 5
 
 # Convert FIGlet to TDF
 retrofont convert --input font.flf --output font.tdf --type block
-
 # Convert with color support
 retrofont convert --input font.flf --output font.tdf --type color
 
@@ -64,7 +63,7 @@ FIGlet (Frank, Ian & Glenn's letters) fonts are text-based ASCII art fonts:
 - **Header**: Contains metadata like height, baseline, hard blank character
 - **Character Set**: Supports ASCII printable range (32-126) plus extended codes
 - **Hard Blanks**: Special character (often `$`) representing non-breaking spaces
-- **Stream Loading**: Supports `Font::from_reader()` for memory-efficient loading
+- **Stream Loading**: Supports `Font::read()` for memory-efficient loading
 
 Example FIGlet font structure:
 ```
@@ -88,7 +87,7 @@ Binary format from the DOS-era TheDraw ANSI editor:
 ## Crate Layout
 
 - `crates/retrofont` – library providing parsing, rendering, conversion
-- `crates/retrofont-cli` – (future) command line interface
+- `crates/retrofont-cli` – command line interface
 
 ## Advanced Features
 
@@ -97,7 +96,8 @@ Binary format from the DOS-era TheDraw ANSI editor:
 Implement the `FontTarget` trait for custom output:
 
 ```rust
-use retrofont::{FontTarget, Cell};
+use retrofont::{Cell, FontTarget};
+use std::fmt::Write;
 
 struct HtmlTarget {
     output: String,
@@ -105,12 +105,11 @@ struct HtmlTarget {
 
 impl FontTarget for HtmlTarget {
     type Error = std::fmt::Error;
-    
+
     fn draw(&mut self, cell: Cell) -> Result<(), Self::Error> {
-        // Convert to HTML span with color
+        // Emit the DOS palette index as a CSS class
         if let Some(fg) = cell.fg {
-            write!(&mut self.output, "<span style='color:#{:02x}{:02x}{:02x}'>", 
-                   fg.r, fg.g, fg.b)?;
+            write!(&mut self.output, "<span class='fg{fg}'>")?;
         }
         write!(&mut self.output, "{}", cell.ch)?;
         if cell.fg.is_some() {
@@ -118,14 +117,15 @@ impl FontTarget for HtmlTarget {
         }
         Ok(())
     }
-    
+
     fn next_line(&mut self) -> Result<(), Self::Error> {
         writeln!(&mut self.output, "<br>")?;
         Ok(())
     }
-    
-    fn next_char(&mut self) -> Result<(), Self::Error> {
-        // For horizontal layout
+
+    // Optional: transparent cells advance without drawing.
+    fn skip(&mut self) -> Result<(), Self::Error> {
+        self.output.push(' ');
         Ok(())
     }
 }
@@ -134,7 +134,7 @@ impl FontTarget for HtmlTarget {
 ### Render Options
 
 ```rust
-use retrofont::RenderOptions;
+use retrofont::{RenderMode, RenderOptions};
 
 // Default: Display mode, outline style 0
 let opts = RenderOptions::default();
@@ -165,9 +165,10 @@ The library uses a semantic model for glyph representation:
 | Part | Description | Display Mode | Edit Mode |
 |------|-------------|--------------|-----------|
 | `Char(char)` | Regular Unicode character | Rendered | Rendered |
-| `Colored { ch, fg, bg, blink }` | Colored character | With color | With color + blink indicator |
+| `AnsiChar { ch, fg, bg, blink }` | Colored character | With color | With color + blink indicator |
 | `HardBlank` | Non-breaking space (0xFF) | Space | `·` or similar |
 | `NewLine` | Line separator | Line break | Line break |
+| `Skip` | Transparent cell | Skipped | Skipped |
 | `FillMarker` | Outline fill (@) | Space | `@` |
 | `OutlineHole` | Outline hole (O) | Space | `O` |
 | `OutlinePlaceholder(ch)` | Style placeholder (A-R) | Box drawing | Letter |

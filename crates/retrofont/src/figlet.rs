@@ -1,4 +1,4 @@
-//! FIGlet font placeholder.
+//! FIGlet (.flf) font parsing, rendering and serialization.
 use crate::{
     error::{FontError, Result},
     glyph::{Glyph, GlyphPart},

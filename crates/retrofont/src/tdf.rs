@@ -1,4 +1,4 @@
-//! TDF font support (placeholder implementation)
+//! TheDraw (TDF) font parsing, rendering and serialization.
 use crate::{
     error::{FontError, Result},
     glyph::{Glyph, GlyphPart},

@@ -70,7 +70,7 @@ enum Cmd {
         input: String,
         #[arg(short, long)]
         output: String,
-        #[arg(long, default_value = "color")]
+        #[arg(long = "type", alias = "ty", default_value = "color")]
         ty: String,
         #[arg(
             short,
