@@ -36,34 +36,6 @@ pub enum TdfFontType {
     Color,
 }
 
-#[derive(Debug)]
-pub enum TdfParseError {
-    FileTooShort,
-    IdLengthMismatch(u8),
-    IdMismatch,
-    FontIndicatorMismatch,
-    UnsupportedFontType(u8),
-    GlyphOutsideFontDataSize(usize),
-    NameTooLong(usize),
-}
-
-impl std::fmt::Display for TdfParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use TdfParseError::*;
-        match self {
-            FileTooShort => write!(f, "file too short"),
-            IdLengthMismatch(l) => write!(f, "id length mismatch {l}"),
-            IdMismatch => write!(f, "id mismatch"),
-            FontIndicatorMismatch => write!(f, "font indicator mismatch"),
-            UnsupportedFontType(t) => write!(f, "unsupported font type {t}"),
-            GlyphOutsideFontDataSize(o) => write!(f, "glyph outside font data {o}"),
-            NameTooLong(l) => write!(f, "name too long {l}"),
-        }
-    }
-}
-
-impl std::error::Error for TdfParseError {}
-
 #[derive(Clone)]
 pub struct TdfFont {
     pub name: String,
