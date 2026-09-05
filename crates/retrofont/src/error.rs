@@ -20,6 +20,10 @@ pub enum FontError {
     FigletIncompleteHeader,
     #[error("FIGlet: missing height in header")]
     FigletMissingHeight,
+    #[error("FIGlet: height {height} out of range (1..={max})")]
+    FigletHeightOutOfRange { height: usize, max: usize },
+    #[error("FIGlet: fewer comment lines than declared in the header")]
+    FigletIncompleteComments,
     #[error("FIGlet: incomplete character definition")]
     FigletIncompleteChar,
     #[error("FIGlet: character line missing @ marker")]

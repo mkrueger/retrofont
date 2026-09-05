@@ -86,3 +86,27 @@ fn negative_spacing_is_rejected() {
         Err(FontError::TdfSpacingOutOfRange { .. })
     ));
 }
+
+#[test]
+fn overlong_encoded_name_is_rejected() {
+    let font = TdfFont::new("valid", TdfFontType::Block, 1);
+    let mut bytes = font.to_bytes().expect("should serialize");
+    bytes[24] = 13;
+
+    assert!(matches!(
+        TdfFont::load(&bytes),
+        Err(FontError::TdfNameTooLong { len: 13, max: 12 })
+    ));
+}
+
+#[test]
+fn truncated_fixed_width_name_is_rejected() {
+    let font = TdfFont::new("", TdfFontType::Block, 1);
+    let mut bytes = font.to_bytes().expect("should serialize");
+    bytes.truncate(25);
+
+    assert!(matches!(
+        TdfFont::load(&bytes),
+        Err(FontError::TdfTruncated { field: "name" })
+    ));
+}

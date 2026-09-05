@@ -182,6 +182,12 @@ impl FigletFont {
             .get(1)
             .and_then(|s| s.parse().ok())
             .ok_or(FontError::FigletMissingHeight)?;
+        if !(1..=u8::MAX as usize).contains(&height) {
+            return Err(FontError::FigletHeightOutOfRange {
+                height,
+                max: u8::MAX as usize,
+            });
+        }
         let comment_count: usize = header_parts
             .get(5)
             .and_then(|s| s.parse().ok())
@@ -194,11 +200,11 @@ impl FigletFont {
         // Read comment lines
         for _ in 0..comment_count {
             if line_idx >= line_ranges.len() {
-                break;
+                return Err(FontError::FigletIncompleteComments);
             }
             let r = line_ranges[line_idx].clone();
             line_idx += 1;
-            let c = std::str::from_utf8(&bytes[r]).unwrap_or("");
+            let c = std::str::from_utf8(&bytes[r])?;
             font.comments.push(c.to_string());
         }
 
@@ -211,21 +217,18 @@ impl FigletFont {
 
         // Load required characters (ASCII 32-126) = 95 chars
         for ch in 32u8..=126u8 {
-            match read_character_ranges(&line_ranges, &mut line_idx, height, bytes.as_ref()) {
-                Ok(ranges) => {
-                    let start = glyph_lines.len();
-                    let mut max_w = 0usize;
-                    for r in &ranges {
-                        max_w = max_w.max(r.end.saturating_sub(r.start));
-                    }
-                    glyph_lines.extend(ranges);
-                    glyph_line_start[ch as usize] = start as u32;
-                    glyph_line_len[ch as usize] = (glyph_lines.len() - start) as u8;
-                    sum_width += max_w;
-                    count += 1;
-                }
-                Err(_) => break,
+            let ranges =
+                read_character_ranges(&line_ranges, &mut line_idx, height, bytes.as_ref())?;
+            let start = glyph_lines.len();
+            let mut max_w = 0usize;
+            for r in &ranges {
+                max_w = max_w.max(r.end.saturating_sub(r.start));
             }
+            glyph_lines.extend(ranges);
+            glyph_line_start[ch as usize] = start as u32;
+            glyph_line_len[ch as usize] = (glyph_lines.len() - start) as u8;
+            sum_width += max_w;
+            count += 1;
         }
 
         // Try to load one more character (often 127 or extended chars)
@@ -437,7 +440,7 @@ fn read_character_ranges(
     bytes: &[u8],
 ) -> Result<Vec<Range<usize>>> {
     let mut out = Vec::with_capacity(height);
-    for _ in 0..height {
+    for row in 0..height {
         let r = lines
             .get(*line_idx)
             .ok_or(FontError::FigletIncompleteChar)?
@@ -445,6 +448,9 @@ fn read_character_ranges(
         *line_idx += 1;
         let line = &bytes[r.clone()];
         if line.ends_with(b"@@") {
+            if row + 1 != height {
+                return Err(FontError::FigletIncompleteChar);
+            }
             out.push(r.start..(r.end - 2));
             break;
         }

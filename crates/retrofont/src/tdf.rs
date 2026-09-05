@@ -12,7 +12,6 @@ const THE_DRAW_FONT_ID: &[u8; 18] = b"TheDraw FONTS file";
 const CTRL_Z: u8 = 0x1A;
 const FONT_INDICATOR: u32 = 0xFF00_AA55;
 const FONT_NAME_LEN: usize = 12;
-const FONT_NAME_LEN_MAX: usize = 16; // 12 + 4 nulls
 const CHAR_TABLE_SIZE: usize = 94; // printable  !..~ range
 const TDF_FIRST_CHAR: u8 = b'!';
 const TDF_LAST_CHAR: u8 = b'~';
@@ -174,7 +173,7 @@ impl TdfFont {
             if o + 4 > b.len() {
                 return Err(FontError::TdfTruncated { field: "indicator" });
             }
-            let indicator = u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+            let indicator = u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]);
             if indicator != FONT_INDICATOR {
                 return Err(FontError::TdfFontIndicatorMismatch);
             }
@@ -186,10 +185,16 @@ impl TdfFont {
             }
             let orig_len = b[o] as usize;
             o += 1;
-            let mut name_len = orig_len.min(FONT_NAME_LEN_MAX);
-            if o + name_len > b.len() {
+            if orig_len > FONT_NAME_LEN {
+                return Err(FontError::TdfNameTooLong {
+                    len: orig_len,
+                    max: FONT_NAME_LEN,
+                });
+            }
+            if o + FONT_NAME_LEN > b.len() {
                 return Err(FontError::TdfTruncated { field: "name" });
             }
+            let mut name_len = orig_len;
             for i in 0..name_len {
                 if b[o + i] == 0 {
                     name_len = i;
@@ -198,6 +203,9 @@ impl TdfFont {
             }
             let name = String::from_utf8_lossy(&b[o..o + name_len]).into_owned();
             o += FONT_NAME_LEN; // always skip full 12 bytes region
+            if o + 4 > b.len() {
+                return Err(FontError::TdfTruncated { field: "reserved" });
+            }
             o += 4; // magic bytes
             if o >= b.len() {
                 return Err(FontError::TdfTruncated { field: "font type" });
