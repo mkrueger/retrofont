@@ -366,11 +366,22 @@ impl TdfFont {
                     match part {
                         GlyphPart::NewLine => glyph_block.push(13),
                         GlyphPart::EndMarker => glyph_block.push(b'&'),
-                        GlyphPart::HardBlank => glyph_block.push(0xFF),
+                        GlyphPart::HardBlank => {
+                            glyph_block.push(0xFF);
+                            // Color cells are always char + attribute, including blanks.
+                            if self.font_type == TdfFontType::Color {
+                                glyph_block.push(0);
+                            }
+                        }
                         GlyphPart::FillMarker => glyph_block.push(b'@'),
                         GlyphPart::OutlineHole => glyph_block.push(b'O'),
                         GlyphPart::OutlinePlaceholder(b) => glyph_block.push(*b),
-                        GlyphPart::Skip => glyph_block.push(b' '),
+                        GlyphPart::Skip => {
+                            glyph_block.push(b' ');
+                            if self.font_type == TdfFontType::Color {
+                                glyph_block.push(0);
+                            }
+                        }
                         GlyphPart::Char(c) => {
                             let mapped = UNICODE_TO_CP437.get(c).copied().unwrap_or(b'?');
                             glyph_block.push(mapped);

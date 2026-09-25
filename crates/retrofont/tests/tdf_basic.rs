@@ -254,3 +254,46 @@ fn tdf_outline_uses_unicode_box_chars() {
         .unwrap();
     assert_eq!(lines(&target)[0], "──│");
 }
+
+#[test]
+fn tdf_round_trip_color_blanks_keep_cell_stream_in_sync() {
+    let mut font = TdfFont::new("COLOR", TdfFontType::Color, 0);
+    let parts = vec![
+        GlyphPart::AnsiChar {
+            ch: 'A',
+            fg: 0x1,
+            bg: 0x2,
+            blink: false,
+        },
+        GlyphPart::Skip,
+        GlyphPart::HardBlank,
+        GlyphPart::AnsiChar {
+            ch: 'B',
+            fg: 0x3,
+            bg: 0x4,
+            blink: true,
+        },
+        GlyphPart::NewLine,
+        GlyphPart::HardBlank,
+        GlyphPart::AnsiChar {
+            ch: 'C',
+            fg: 0xF,
+            bg: 0x0,
+            blink: false,
+        },
+    ];
+    font.add_glyph(
+        'A',
+        Glyph {
+            width: 4,
+            height: 2,
+            parts: parts.clone(),
+        },
+    );
+    let bytes = font.to_bytes().unwrap();
+    let parsed = TdfFont::load(&bytes).unwrap();
+    assert_eq!(parsed[0].glyph('A').unwrap().parts, parts);
+
+    let reserialized = parsed[0].to_bytes().unwrap();
+    assert_eq!(reserialized, bytes);
+}
