@@ -1,16 +1,16 @@
 # retrofont
 
-A Rust library for parsing, rendering, and converting retro ASCII/ANSI art fonts, supporting both FIGlet and TheDraw (TDF) formats with full Unicode support.
+A Rust library for parsing, rendering, and converting retro ASCII/ANSI art fonts, supporting FIGlet, TOIlet and TheDraw (TDF) formats with full Unicode support.
 
 ## Features
 
-- 🎨 **Multiple Font Formats**: Parse and render both FIGlet (.flf) and TheDraw (.tdf) fonts
-- 🔄 **Format Conversion**: Convert FIGlet fonts to TDF with compatibility checking
+- 🎨 **Multiple Font Formats**: Parse and render FIGlet (.flf), TOIlet (.tlf) and TheDraw (.tdf) fonts
+- 🔄 **Format Conversion**: Convert FIGlet and TOIlet fonts to TDF with compatibility checking
 - 🌍 **Unicode Support**: Automatic CP437 to Unicode conversion with proper character mapping
 - 🎭 **Rendering Modes**: Display mode for final output, Edit mode for font development
 - 📐 **Text Layout**: FIGlet-compatible kerning and smushing, multi-line text, word wrapping and justification
 - 📦 **Bundle Support**: Handle TDF files containing multiple fonts
-- 🗜️ **Archive Support**: Load FIGlet fonts from ZIP files
+- 🗜️ **Archive Support**: Load FIGlet and TOIlet fonts from ZIP files
 - 🎨 **Color Support**: Full 16-color DOS palette with blink attribute
 - 🔧 **Outline Styles**: 19 different outline rendering styles
 
@@ -32,7 +32,7 @@ fn main() -> retrofont::Result<()> {
     // Load a font (auto-detects format)
     let data = std::fs::read("fonts/doom.flf")?;
     let fonts = Font::load(&data)?;
-    let font = &fonts[0]; // FIGlet returns one font, TDF can have multiple
+    let font = &fonts[0]; // FIGlet/TOIlet files hold one font, TDF can have multiple
 
     // Create a rendering target
     let mut target = MemoryBufferTarget::new();
@@ -228,13 +228,17 @@ For zero-copy loading of an owned buffer, use `Font::load_owned` or
 
 ### FigletFont
 
-- Text-based ASCII art fonts
+- Text-based ASCII art fonts: FIGlet (`.flf`) and TOIlet (`.tlf`), see
+  `FigletFont::format`
 - Supports hard blanks (non-breaking spaces)
 - Horizontal kerning and smushing as specified by the font header
-- ZIP archive support for compressed fonts
+- ZIP archive support for compressed fonts (the font entry is found by its content)
 - Character range: ASCII printable, the German letters (ÄÖÜäöüß) and code-tagged
   characters anywhere in Unicode (`FigletFont::add_char` accepts any `char`)
-- UTF-8 fonts, with a Latin-1 fallback for older fonts
+- UTF-8 fonts, with a Latin-1 fallback for older FIGlet fonts; TOIlet fonts must be UTF-8
+- ANSI colour codes in TOIlet glyphs become `GlyphPart::AnsiChar` cells (interpreted
+  like TOIlet's libcaca; the terminal's default colours become light gray on black),
+  and `to_bytes` writes them back for TOIlet fonts
 - Glyphs are read like figlet reads them: any end-mark character, blank glyphs are
   defined with zero width, and `MissingGlyph::Skip` renders the font's code-0
   glyph if it has one
@@ -286,7 +290,7 @@ retrofont = { version = "0.2", default-features = false, features = ["tdf"] }
 Available features:
 
 - `tdf`: TheDraw font support (default)
-- `figlet`: FIGlet font support (default)
+- `figlet`: FIGlet and TOIlet font support (default)
 - `convert`: Font conversion utilities (default, implies `tdf` and `figlet`)
 - `color`: Color rendering support
 - `serde`: `Serialize`/`Deserialize` support for glyph and render types
@@ -331,4 +335,5 @@ Contributions welcome! Please ensure:
 - [CLI tool](https://crates.io/crates/retrofont-cli) - Command-line interface
 - [Repository](https://github.com/mkrueger/retrofont) - Source code
 - [FIGlet](http://www.figlet.org/) - FIGlet documentation
+- [TOIlet](http://caca.zoy.org/wiki/toilet) - TOIlet documentation
 - [TheDraw](https://en.wikipedia.org/wiki/TheDraw) - TheDraw information

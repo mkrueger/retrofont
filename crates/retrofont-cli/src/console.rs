@@ -40,8 +40,15 @@ impl ConsoleRenderer {
             if li > 0 {
                 out.push('\n');
             }
+            let mut prev_styled = false;
             for cell in line {
                 let ch = cell.ch;
+
+                // Styled cells set all of their attributes; clear the previous ones first.
+                if prev_styled {
+                    out.push_str("\x1B[0m");
+                }
+                prev_styled = cell.blink || cell.fg.is_some() || cell.bg.is_some();
 
                 // Build ANSI escape sequence
                 let mut escape = String::new();

@@ -1,18 +1,18 @@
 # retrofont
 
-A Rust library and CLI toolkit for working with retro ASCII/ANSI art fonts, supporting both FIGlet and TheDraw (TDF) formats with full Unicode conversion and rendering capabilities.
+A Rust library and CLI toolkit for working with retro ASCII/ANSI art fonts, supporting FIGlet, TOIlet and TheDraw (TDF) formats with full Unicode conversion and rendering capabilities.
 
 ![Sample rendering](assets/sample.png)
 
 ## Features
 
-- 🎨 **Multiple Font Formats**: Parse and render both FIGlet (.flf) and TheDraw (.tdf) fonts
-- 🔄 **Format Conversion**: Convert FIGlet fonts to TDF with compatibility checking
+- 🎨 **Multiple Font Formats**: Parse and render FIGlet (.flf), TOIlet (.tlf) and TheDraw (.tdf) fonts
+- 🔄 **Format Conversion**: Convert FIGlet and TOIlet fonts to TDF with compatibility checking
 - 🌍 **Unicode Support**: Automatic CP437 to Unicode conversion with proper character mapping
 - 🎭 **Rendering Modes**: Display mode for final output, Edit mode for font development
 - 📐 **Text Layout**: FIGlet-compatible kerning and smushing, multi-line text, word wrapping and justification
 - 📦 **Bundle Support**: Handle TDF files containing multiple fonts
-- 🗜️ **Archive Support**: Load fonts from ZIP files
+- 🗜️ **Archive Support**: Load FIGlet and TOIlet fonts from ZIP files
 - 🎨 **Color Support**: Full 16-color DOS palette with authentic VGA RGB values
 - 🔧 **Outline Styles**: 19 different outline rendering styles for outline fonts
 
@@ -36,6 +36,9 @@ cargo install retrofont-cli
 ```bash
 # Render text with a FIGlet font
 retrofont render --font fonts/doom.flf --text "HELLO WORLD"
+
+# TOIlet font (plain or zipped); the format is detected from the file content
+retrofont render --font fonts/future.tlf --text "Hello"
 
 # Render with a TDF font bundle (uses first font)
 retrofont render --font fonts/ansi.tdf --text "Retro"
@@ -80,6 +83,15 @@ Example FIGlet font structure:
 flf2a$ 8 6 14 15 16
 Standard by Glenn Chappell & Ian Chai
 ```
+
+### TOIlet Fonts (.tlf)
+
+[TOIlet](http://caca.zoy.org/wiki/toilet) fonts use the FIGlet format with a `tlf2a`
+signature. They are always UTF-8, so they can use block, box-drawing and braille
+characters, and glyphs may contain ANSI colour codes, which become colour cells as in
+TOIlet. Many are distributed as ZIP archives; the format is detected from the content.
+`FigletFont::format()` tells FIGlet and TOIlet fonts apart, and `to_bytes()` keeps the
+format (colours can only be written to TOIlet files).
 
 ### TheDraw Fonts (.tdf)
 
@@ -182,7 +194,7 @@ let opts = RenderOptions {
 
 ### Core Components
 
-- **`Font` enum**: Unified interface for both FIGlet and TDF fonts
+- **`Font` enum**: Unified interface for FIGlet/TOIlet and TDF fonts
 - **`GlyphPart` enum**: Semantic representation of glyph components
 - **`FontTarget` trait**: Abstraction for rendering destinations
 - **`RenderMode`**: Control visibility of technical markers
@@ -224,5 +236,6 @@ at your option.
 
 - [Icy Tools](https://github.com/mkrueger/icy_tools/)
 - [FIGlet Documentation](http://www.figlet.org/)
+- [TOIlet](http://caca.zoy.org/wiki/toilet)
 - [CP437 Character Set](https://en.wikipedia.org/wiki/Code_page_437)
 - [ANSI Art Archive](https://16colo.rs/)

@@ -14,7 +14,7 @@ pub enum FontError {
     FigletGzipNotSupported,
     #[error("FIGlet: missing or invalid header")]
     FigletMissingHeader,
-    #[error("FIGlet: not a flf2a header")]
+    #[error("FIGlet: not a flf2a or tlf2a header")]
     FigletInvalidSignature,
     #[error("FIGlet: incomplete header")]
     FigletIncompleteHeader,
@@ -33,7 +33,7 @@ pub enum FontError {
     // ZIP archive errors
     #[error("ZIP: {0}")]
     Zip(String),
-    #[error("ZIP: archive contains no .flf file")]
+    #[error("ZIP: archive contains no FIGlet or TOIlet font")]
     ZipNoFlf,
 
     // TDF-specific errors

@@ -1,4 +1,6 @@
-//! FIGlet (.flf) font parsing, rendering and serialization.
+//! FIGlet (.flf) and TOIlet (.tlf) font parsing, rendering and serialization.
+//!
+//! TOIlet fonts use the FIGlet format with a `tlf2a` signature and are always UTF-8.
 use crate::{
     error::{FontError, Result},
     glyph::{Glyph, GlyphPart},
@@ -36,6 +38,39 @@ pub mod layout {
     pub const SMUSHING: u32 = 128;
 }
 
+/// The file format a [`FigletFont`] was read from and is written as.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FigletFormat {
+    /// FIGlet `.flf` (`flf2a` signature). UTF-8, or Latin-1 for older fonts.
+    #[default]
+    Flf,
+    /// TOIlet `.tlf` (`tlf2a` signature). Always UTF-8.
+    Tlf,
+}
+
+impl FigletFormat {
+    fn signature(self) -> &'static str {
+        match self {
+            FigletFormat::Flf => "flf2a",
+            FigletFormat::Tlf => "tlf2a",
+        }
+    }
+
+    fn detect(bytes: &[u8]) -> Option<Self> {
+        [FigletFormat::Flf, FigletFormat::Tlf]
+            .into_iter()
+            .find(|f| bytes.starts_with(f.signature().as_bytes()))
+    }
+
+    /// The usual file extension, without the dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            FigletFormat::Flf => "flf",
+            FigletFormat::Tlf => "tlf",
+        }
+    }
+}
+
 /// The characters that follow the 95 required ASCII glyphs in a FIGfont, in file order.
 const DEUTSCH: [char; 7] = ['Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß'];
 
@@ -45,6 +80,7 @@ pub struct FigletFont {
     pub header: String,
     pub comments: Vec<String>,
     pub hard_blank: char,
+    format: FigletFormat,
     // FIGfont 2 `full_layout` bits, see [`layout`].
     full_layout: u32,
     // 0 = left-to-right, 1 = right-to-left.
@@ -85,6 +121,8 @@ impl Encoding {
 struct LazyFigletSource {
     bytes: Arc<[u8]>,
     encoding: Encoding,
+    // TOIlet glyphs may contain ANSI colour codes.
+    ansi: bool,
     hard_blank: char,
     // One entry per glyph line with end marks removed, in parse order.
     glyph_lines: Vec<Range<usize>>,
@@ -105,6 +143,7 @@ impl FigletFont {
             header: String::new(),
             comments: Vec::new(),
             hard_blank: '$',
+            format: FigletFormat::Flf,
             full_layout: 0,
             print_direction: 0,
             glyphs_overlay: BTreeMap::new(),
@@ -122,6 +161,15 @@ impl FigletFont {
     /// Set the horizontal layout bits (see [`layout`]). Vertical layout bits are ignored.
     pub fn set_layout(&mut self, full_layout: u32) {
         self.full_layout = full_layout & (layout::RULES | layout::KERNING | layout::SMUSHING);
+    }
+
+    /// Whether this is a FIGlet or TOIlet font; decides the signature [`to_bytes`](Self::to_bytes) writes.
+    pub fn format(&self) -> FigletFormat {
+        self.format
+    }
+
+    pub fn set_format(&mut self, format: FigletFormat) {
+        self.format = format;
     }
 
     /// Print direction from the font header: 0 = left-to-right, 1 = right-to-left.
@@ -194,25 +242,24 @@ impl FigletFont {
             // For now return error to avoid pulling second decompression crate.
             return Err(FontError::FigletGzipNotSupported);
         }
-        // If file looks like a ZIP (PK\x03\x04) attempt to locate a .flf inside.
-        if data.len() >= 4 && &data[0..4] == b"PK\x03\x04" {
+        // ZIP archive: use the first entry that is a FIGlet or TOIlet font. Entry names
+        // are not reliable; TOIlet's own zipped fonts store theirs as "-".
+        if data.starts_with(b"PK\x03\x04") {
             let mut archive = ZipArchive::new(Cursor::new(data))
                 .map_err(|e| FontError::Zip(format!("open error: {e}")))?;
-            let mut found = None;
             for i in 0..archive.len() {
                 let mut file = archive
                     .by_index(i)
                     .map_err(|e| FontError::Zip(format!("entry error: {e}")))?;
-                if file.name().ends_with(".flf") {
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf)
-                        .map_err(|e| FontError::Zip(format!("read error: {e}")))?;
-                    found = Some(buf);
-                    break;
+                if file.is_dir() {
+                    continue;
                 }
-            }
-            if let Some(content) = found {
-                return FigletFont::parse_bytes(Arc::<[u8]>::from(content));
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)
+                    .map_err(|e| FontError::Zip(format!("read error: {e}")))?;
+                if FigletFormat::detect(&buf).is_some() {
+                    return FigletFont::parse_bytes(Arc::<[u8]>::from(buf));
+                }
             }
             return Err(FontError::ZipNoFlf);
         }
@@ -220,7 +267,15 @@ impl FigletFont {
     }
 
     fn parse_bytes(bytes: Arc<[u8]>) -> Result<Self> {
-        let encoding = Encoding::detect(bytes.as_ref());
+        let format =
+            FigletFormat::detect(bytes.as_ref()).ok_or(FontError::FigletInvalidSignature)?;
+        let encoding = match format {
+            FigletFormat::Flf => Encoding::detect(bytes.as_ref()),
+            FigletFormat::Tlf => {
+                std::str::from_utf8(bytes.as_ref())?;
+                Encoding::Utf8
+            }
+        };
         let line_ranges = compute_line_ranges(bytes.as_ref());
         if line_ranges.is_empty() {
             return Err(FontError::FigletMissingHeader);
@@ -230,11 +285,8 @@ impl FigletFont {
         let header_range = line_ranges[line_idx].clone();
         let header_line = encoding.decode(&bytes[header_range]).into_owned();
         line_idx += 1;
-        if !header_line.starts_with("flf2a") {
-            return Err(FontError::FigletInvalidSignature);
-        }
 
-        // Extract hard blank character (the character immediately after "flf2a")
+        // The hard blank is the character right after the signature.
         let hard_blank = header_line.chars().nth(5).unwrap_or('$');
 
         let header_parts: Vec<&str> = header_line.split_whitespace().collect();
@@ -278,6 +330,7 @@ impl FigletFont {
         let mut font = FigletFont::new("figlet");
         font.header = header_line.to_string();
         font.hard_blank = hard_blank;
+        font.format = format;
         font.set_layout(full_layout);
         font.print_direction = print_direction;
 
@@ -298,6 +351,7 @@ impl FigletFont {
             pos: line_idx,
             height,
             encoding,
+            ansi: format == FigletFormat::Tlf,
         };
         let mut builder = LazyBuilder::default();
 
@@ -335,6 +389,7 @@ impl FigletFont {
         font.lazy = Some(LazyFigletSource {
             bytes,
             encoding,
+            ansi: format == FigletFormat::Tlf,
             hard_blank,
             glyph_lines: builder.glyph_lines,
             index: builder.index,
@@ -385,7 +440,7 @@ impl FigletFont {
                 .is_some_and(|lazy| lazy.index.contains_key(&ch))
     }
 
-    /// Serialize this FIGlet font to bytes in .flf format.
+    /// Serialize this font to bytes in the FIGlet or TOIlet format, see [`format`](Self::format).
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
 
@@ -393,7 +448,7 @@ impl FigletFont {
         let max_height = self.compute_max_height();
 
         // Write header line
-        // Format: flf2a<hardblank> height baseline maxlen old_layout comment_count
+        // Format: flf2a|tlf2a<hardblank> height baseline maxlen old_layout comment_count
         //         print_direction full_layout
         let comment_count = self.comments.len();
         let full_layout = self.full_layout;
@@ -406,7 +461,8 @@ impl FigletFont {
             -1
         };
         let header = format!(
-            "flf2a{} {} {} {} {} {} {} {}\n",
+            "{}{} {} {} {} {} {} {} {}\n",
+            self.format.signature(),
             self.hard_blank,
             max_height,
             max_height,
@@ -461,42 +517,48 @@ impl FigletFont {
 
     fn write_glyph_lines(&self, out: &mut Vec<u8>, ch: char, max_height: usize) {
         if let Some(glyph) = self.glyph(ch) {
-            // Build lines from glyph parts
-            let mut lines: Vec<String> = Vec::new();
-            let mut current_line = String::new();
+            // Each line with its last visible character.
+            let mut lines: Vec<(String, Option<char>)> = Vec::new();
+            let mut current = (String::new(), None);
 
             for part in &glyph.parts {
-                match part {
+                let ch = match *part {
                     GlyphPart::NewLine => {
-                        lines.push(current_line);
-                        current_line = String::new();
+                        lines.push(std::mem::take(&mut current));
+                        continue;
                     }
-                    GlyphPart::HardBlank => {
-                        current_line.push(self.hard_blank);
+                    GlyphPart::HardBlank => self.hard_blank,
+                    GlyphPart::Char(c) => c,
+                    // Colours can only be stored in TOIlet fonts.
+                    GlyphPart::AnsiChar { ch, fg, bg, blink } => {
+                        if self.format == FigletFormat::Tlf {
+                            current.0 += &sgr_sequence(fg, bg, blink);
+                            current.0.push(ch);
+                            current.0 += "\x1b[0m";
+                            current.1 = Some(ch);
+                            continue;
+                        }
+                        ch
                     }
-                    GlyphPart::Char(c) => {
-                        current_line.push(*c);
-                    }
-                    _ => {
-                        // For other part types, use space as fallback
-                        current_line.push(' ');
-                    }
-                }
+                    _ => ' ',
+                };
+                current.0.push(ch);
+                current.1 = Some(ch);
             }
             // Don't forget the last line if not empty
-            if !current_line.is_empty() || lines.is_empty() {
-                lines.push(current_line);
+            if !current.0.is_empty() || lines.is_empty() {
+                lines.push(current);
             }
 
             // Pad to max_height if needed
             while lines.len() < max_height {
-                lines.push(String::new());
+                lines.push((String::new(), None));
             }
 
             // End marks are chosen per line; avoid one that the line itself ends with,
             // since readers strip the whole trailing run of the end mark.
-            for (i, line) in lines.iter().enumerate() {
-                let mark = if line.ends_with('@') { '#' } else { '@' };
+            for (i, (line, last)) in lines.iter().enumerate() {
+                let mark = if *last == Some('@') { '#' } else { '@' };
                 out.extend(line.as_bytes());
                 out.extend(
                     mark.to_string()
@@ -549,6 +611,7 @@ struct GlyphReader<'a> {
     pos: usize,
     height: usize,
     encoding: Encoding,
+    ansi: bool,
 }
 
 /// One glyph row: the content range (end marks removed) and its width in characters.
@@ -568,22 +631,22 @@ impl<'a> GlyphReader<'a> {
         Some(
             lines
                 .iter()
-                .map(|r| strip_end_marks(self.bytes, r.clone(), self.encoding))
+                .map(|r| strip_end_marks(self.bytes, r.clone(), self.encoding, self.ansi))
                 .collect(),
         )
     }
 }
 
 /// Remove trailing whitespace, then the run of the line's last character (its end mark),
-/// like C figlet's `readfontchar`.
-fn strip_end_marks(bytes: &[u8], line: Range<usize>, encoding: Encoding) -> Row {
+/// like C figlet's `readfontchar`. With `ansi`, only visible characters count.
+fn strip_end_marks(bytes: &[u8], line: Range<usize>, encoding: Encoding, ansi: bool) -> Row {
     let s = &bytes[line.clone()];
-    let mut end = s.len();
-    while end > 0 && matches!(s[end - 1], b' ' | b'\t' | b'\r' | b'\n' | 0x0B | 0x0C) {
-        end -= 1;
-    }
     let (end, width) = match encoding {
         Encoding::Latin1 => {
+            let mut end = s.len();
+            while end > 0 && is_line_space(char::from(s[end - 1])) {
+                end -= 1;
+            }
             if let Some(&mark) = s[..end].last() {
                 while end > 0 && s[end - 1] == mark {
                     end -= 1;
@@ -592,16 +655,141 @@ fn strip_end_marks(bytes: &[u8], line: Range<usize>, encoding: Encoding) -> Row 
             (end, end)
         }
         Encoding::Utf8 => {
-            // Only ASCII was stripped, so `end` is still a char boundary.
-            let text = std::str::from_utf8(&s[..end]).unwrap_or_default();
-            let text = match text.chars().next_back() {
-                Some(mark) => text.trim_end_matches(mark),
-                None => text,
-            };
-            (text.len(), text.chars().count())
+            let mut cells = parse_line(std::str::from_utf8(s).unwrap_or_default(), ansi);
+            while cells.last().is_some_and(|c| is_line_space(c.ch)) {
+                cells.pop();
+            }
+            if let Some(mark) = cells.last().map(|c| c.ch) {
+                while cells.last().is_some_and(|c| c.ch == mark) {
+                    cells.pop();
+                }
+            }
+            (cells.last().map_or(0, |c| c.bytes.end), cells.len())
         }
     };
     (line.start..line.start + end, width)
+}
+
+fn is_line_space(ch: char) -> bool {
+    matches!(ch, ' ' | '\t' | '\r' | '\n' | '\x0B' | '\x0C')
+}
+
+/// libcaca colour index (same order as the DOS palette) for each ANSI colour.
+const ANSI_TO_DOS: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
+
+/// ANSI SGR state, interpreted like libcaca's importer, which TOIlet uses.
+#[derive(Clone, Copy, Debug, Default)]
+struct Sgr {
+    fg: Option<u8>,
+    bg: Option<u8>,
+    bold: bool,
+    blink: bool,
+    negative: bool,
+    concealed: bool,
+}
+
+impl Sgr {
+    fn apply(&mut self, params: &str) {
+        for code in params.split(';').map(|p| p.parse::<u32>().unwrap_or(0)) {
+            match code {
+                0 => *self = Sgr::default(),
+                1 => self.bold = true,
+                5 | 6 => self.blink = true,
+                7 => self.negative = true,
+                8 => self.concealed = true,
+                22 => self.bold = false,
+                25 => self.blink = false,
+                27 => self.negative = false,
+                28 => self.concealed = false,
+                30..=37 => self.fg = Some(ANSI_TO_DOS[code as usize - 30]),
+                39 => self.fg = None,
+                40..=47 => self.bg = Some(ANSI_TO_DOS[code as usize - 40]),
+                49 => self.bg = None,
+                90..=97 => self.fg = Some(ANSI_TO_DOS[code as usize - 90] + 8),
+                100..=107 => self.bg = Some(ANSI_TO_DOS[code as usize - 100] + 8),
+                _ => {}
+            }
+        }
+    }
+
+    /// Glyph part for `ch` drawn with this state; default colours become light gray on black.
+    fn part(self, ch: char) -> GlyphPart {
+        if self.concealed {
+            return GlyphPart::Char(ch);
+        }
+        let (mut fg, bg) = if self.negative {
+            (self.bg, self.fg)
+        } else {
+            (self.fg, self.bg)
+        };
+        if self.bold {
+            fg = Some(fg.map_or(15, |c| c | 8));
+        }
+        if fg.is_none() && bg.is_none() && !self.blink {
+            return GlyphPart::Char(ch);
+        }
+        GlyphPart::AnsiChar {
+            ch,
+            fg: fg.unwrap_or(7),
+            bg: bg.unwrap_or(0),
+            blink: self.blink,
+        }
+    }
+}
+
+/// SGR sequence reproducing a colour cell (DOS palette indices).
+fn sgr_sequence(fg: u8, bg: u8, blink: bool) -> String {
+    // The ANSI <-> DOS colour mapping is its own inverse.
+    let code = |c: u8, base: u8, bright: u8| {
+        let c = c & 15;
+        let ansi = ANSI_TO_DOS[usize::from(c & 7)];
+        if c < 8 { base + ansi } else { bright + ansi }
+    };
+    format!(
+        "\x1b[0;{};{}{}m",
+        code(fg, 30, 90),
+        code(bg, 40, 100),
+        if blink { ";5" } else { "" }
+    )
+}
+
+struct LineCell {
+    bytes: Range<usize>,
+    ch: char,
+    sgr: Sgr,
+}
+
+/// The visible characters of a glyph line. With `ansi`, escape sequences are consumed
+/// and SGR colour codes tracked; the state starts fresh on every line.
+fn parse_line(text: &str, ansi: bool) -> Vec<LineCell> {
+    let mut cells = Vec::new();
+    let mut sgr = Sgr::default();
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, ch)) = chars.next() {
+        if !(ansi && ch == '\x1b') {
+            cells.push(LineCell {
+                bytes: i..i + ch.len_utf8(),
+                ch,
+                sgr,
+            });
+            continue;
+        }
+        if chars.next_if(|&(_, c)| c == '[').is_none() {
+            // Two-character escape sequence.
+            chars.next();
+            continue;
+        }
+        let start = chars.peek().map_or(text.len(), |&(j, _)| j);
+        for (j, c) in chars.by_ref() {
+            if ('\x40'..='\x7e').contains(&c) {
+                if c == 'm' {
+                    sgr.apply(&text[start..j]);
+                }
+                break;
+            }
+        }
+    }
+    cells
 }
 
 /// Parse a code tag like C's `%li`: decimal, `0x` hex or `0`-prefixed octal, optionally signed.
@@ -662,16 +850,15 @@ fn decode_glyph(lazy: &LazyFigletSource, idx: usize) -> Glyph {
             parts.push(GlyphPart::NewLine);
         }
         let line = lazy.encoding.decode(&lazy.bytes[r.clone()]);
-        let mut line_width = 0usize;
-        for ch in line.chars() {
-            if ch == lazy.hard_blank {
-                parts.push(GlyphPart::HardBlank);
+        let cells = parse_line(&line, lazy.ansi);
+        for cell in &cells {
+            parts.push(if cell.ch == lazy.hard_blank {
+                GlyphPart::HardBlank
             } else {
-                parts.push(GlyphPart::Char(ch));
-            }
-            line_width += 1;
+                cell.sgr.part(cell.ch)
+            });
         }
-        max_width = max_width.max(line_width);
+        max_width = max_width.max(cells.len());
     }
 
     Glyph {

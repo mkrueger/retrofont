@@ -118,15 +118,14 @@ impl Font {
         glyph.render(target, options)
     }
 
-    /// Load fonts from raw bytes, attempting FIGlet first (header check) then TDF.
+    /// Load fonts from raw bytes, detecting the format from the content.
     ///
     /// Returns a vector containing:
-    /// - A single font for FIGlet files
+    /// - A single font for FIGlet and TOIlet files (plain or zipped)
     /// - Multiple fonts for TDF bundles (which can contain many fonts)
     /// - An error if the format is unrecognized or parsing fails
     pub fn load(bytes: &[u8]) -> Result<Vec<Font>> {
-        // Attempt FIGlet: header starts with 'flf2a'
-        if bytes.len() >= 5 && &bytes[0..5] == b"flf2a" {
+        if is_figlet(bytes) {
             let fig = FigletFont::load(bytes)?;
             return Ok(vec![Font::Figlet(Box::new(fig))]);
         }
@@ -151,8 +150,7 @@ impl Font {
     pub fn load_arc(bytes: Arc<[u8]>) -> Result<Vec<Font>> {
         let b = bytes.as_ref();
 
-        // Attempt FIGlet: header starts with 'flf2a'
-        if b.len() >= 5 && &b[0..5] == b"flf2a" {
+        if is_figlet(b) {
             let fig = FigletFont::load_arc(bytes)?;
             return Ok(vec![Font::Figlet(Box::new(fig))]);
         }
@@ -186,7 +184,7 @@ impl Font {
     /// Convert this font to its binary representation.
     ///
     /// - TDF fonts are serialized to TDF format (.tdf)
-    /// - FIGlet fonts are serialized to FIGlet format (.flf)
+    /// - FIGlet and TOIlet fonts are serialized to their own format (.flf / .tlf)
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
             Font::Tdf(f) => f.to_bytes(),
@@ -198,10 +196,16 @@ impl Font {
     ///
     /// - TDF fonts: `"tdf"`
     /// - FIGlet fonts: `"flf"`
+    /// - TOIlet fonts: `"tlf"`
     pub fn default_extension(&self) -> &'static str {
         match self {
             Font::Tdf(_) => "tdf",
-            Font::Figlet(_) => "flf",
+            Font::Figlet(f) => f.format().extension(),
         }
     }
+}
+
+/// FIGlet/TOIlet signature, or a ZIP archive (only FIGlet and TOIlet fonts are zipped).
+fn is_figlet(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"flf2a") || bytes.starts_with(b"tlf2a") || bytes.starts_with(b"PK\x03\x04")
 }

@@ -1,6 +1,6 @@
 # retrofont-cli
 
-Command-line interface for the retrofont library - render and convert retro ASCII/ANSI art fonts (FIGlet and TheDraw formats).
+Command-line interface for the retrofont library - render and convert retro ASCII/ANSI art fonts (FIGlet, TOIlet and TheDraw formats).
 
 ![Sample rendering](assets/sample.png)
 
@@ -14,11 +14,14 @@ cargo install retrofont-cli
 
 ### Render Text
 
-Render text using FIGlet or TDF fonts:
+Render text using FIGlet, TOIlet or TDF fonts (the format is detected from the file content):
 
 ```bash
 # FIGlet font
 retrofont render --font fonts/doom.flf --text "Hello World"
+
+# TOIlet font (plain or zipped); the format is detected from the file content
+retrofont render --font fonts/future.tlf --text "Hello"
 
 # TDF font (TheDraw)
 retrofont render --font fonts/block.tdf --text "Retro"
@@ -45,7 +48,7 @@ FIGlet fonts are kerned or smushed as their header specifies (like `figlet`);
 
 ### Convert Fonts
 
-Convert between FIGlet and TDF formats:
+Convert FIGlet and TOIlet fonts to TDF:
 
 ```bash
 # Convert FIGlet to TDF block font
@@ -103,7 +106,8 @@ For outline fonts, 19 different rendering styles are available (0-18). Each styl
 ## Supported Formats
 
 - **FIGlet** (.flf): ASCII art fonts with hard blank support
-- **FIGlet ZIP** (.flf as .zip): Compressed FIGlet fonts
+- **TOIlet** (.tlf): UTF-8 FIGlet-style fonts, including ANSI colour codes
+- **ZIP**: Compressed FIGlet and TOIlet fonts
 - **TheDraw** (.tdf): DOS-era ANSI art fonts with color and outline support
 - **TDF Bundles**: Multiple fonts in a single .tdf file
 

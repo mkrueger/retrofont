@@ -1,10 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use retrofont::{
-    Font, Justify, Layout, RenderOptions, TextOptions,
-    convert::figlet_to_tdf,
-    figlet::FigletFont,
-    tdf::{TdfFont, TdfFontType},
+    Font, Justify, Layout, RenderOptions, TextOptions, convert::figlet_to_tdf,
+    figlet::FigletFormat, tdf::TdfFontType,
 };
 use std::fs;
 
@@ -67,6 +65,34 @@ impl From<JustifyArg> for Justify {
     }
 }
 
+/// Load font `num` (1-based) from a file, detecting the format from its content.
+fn load_font(path: &str, num: usize) -> Result<Font> {
+    if num == 0 {
+        anyhow::bail!("Font number must be 1 or greater (1-based index)");
+    }
+    let fonts = Font::load(&fs::read(path)?)?;
+    let count = fonts.len();
+    fonts.into_iter().nth(num - 1).ok_or_else(|| {
+        if count == 1 {
+            anyhow::anyhow!("{path} contains a single font, --num must be 1")
+        } else {
+            anyhow::anyhow!(
+                "Font #{num} does not exist. {path} contains {count} fonts. Use 'inspect' to list them."
+            )
+        }
+    })
+}
+
+fn kind(font: &Font) -> String {
+    match font {
+        Font::Figlet(f) => match f.format() {
+            FigletFormat::Flf => "FIGlet font".to_string(),
+            FigletFormat::Tlf => "TOIlet font".to_string(),
+        },
+        Font::Tdf(f) => format!("TDF font ({:?})", f.font_type()),
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "retrofont", about = "Retro font toolkit CLI")]
 struct Cli {
@@ -119,7 +145,7 @@ enum Cmd {
         )]
         num: usize,
     },
-    /// Convert FIGlet (.flf) to TDF
+    /// Convert a FIGlet (.flf) or TOIlet (.tlf) font to TDF
     Convert {
         #[arg(short, long)]
         input: String,
@@ -165,40 +191,13 @@ fn main() -> Result<()> {
                 );
             }
 
-            if num == 0 {
-                anyhow::bail!("Font number must be 1 or greater (1-based index)");
-            }
-
-            let bytes = fs::read(&font)?;
+            let font_enum = load_font(&font, num)?;
             let mut mode = if edit {
                 RenderOptions::edit()
             } else {
                 RenderOptions::default()
             };
             mode.outline_style = outline;
-            // crude format detection
-            let font_enum = if font.ends_with(".flf") {
-                if num > 1 {
-                    anyhow::bail!("FIGlet files contain only one font, --num must be 1");
-                }
-                Font::Figlet(Box::new(FigletFont::load(&bytes)?))
-            } else {
-                let fonts = TdfFont::load(&bytes)?;
-                let font_count = fonts.len();
-                if font_count == 0 {
-                    anyhow::bail!("No fonts found in TDF file");
-                }
-                if num > font_count {
-                    anyhow::bail!(
-                        "Font #{} does not exist. TDF bundle contains {} font(s). Use 'inspect' to list available fonts.",
-                        num,
-                        font_count
-                    );
-                }
-                Font::Tdf(Box::new(fonts.into_iter().nth(num - 1).ok_or_else(
-                    || anyhow::anyhow!("Font #{num} not found in TDF bundle"),
-                )?))
-            };
             let options = TextOptions {
                 render: mode,
                 layout: layout.into(),
@@ -216,22 +215,9 @@ fn main() -> Result<()> {
             ty,
             num,
         } => {
-            if num == 0 {
-                anyhow::bail!("Font number must be 1 or greater (1-based index)");
-            }
-
-            let bytes = fs::read(&input)?;
-
-            // Currently only FIGlet to TDF conversion is supported
-            if !input.ends_with(".flf") {
-                anyhow::bail!("Convert currently only supports FIGlet (.flf) input files");
-            }
-
-            if num > 1 {
-                anyhow::bail!("FIGlet files contain only one font, --num must be 1");
-            }
-
-            let fig = FigletFont::load(&bytes)?;
+            let Font::Figlet(fig) = load_font(&input, num)? else {
+                anyhow::bail!("Convert only supports FIGlet (.flf) and TOIlet (.tlf) fonts");
+            };
             let target_type = match ty.to_lowercase().as_str() {
                 "outline" => TdfFontType::Outline,
                 "block" => TdfFontType::Block,
@@ -246,25 +232,21 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Inspect { font } => {
-            let bytes = fs::read(&font)?;
-            if font.ends_with(".flf") {
-                let f = FigletFont::load(&bytes)?;
-                println!("FIGlet font: {}", f.name);
-                println!("  Defined characters: {}", f.glyph_count());
-            } else {
-                let fonts = TdfFont::load(&bytes)?;
-                let font_count = fonts.len();
-                if font_count > 1 {
-                    println!("TDF bundle: {} fonts", font_count);
+            let fonts = Font::load(&fs::read(&font)?)?;
+            if fonts.len() > 1 {
+                println!("TDF bundle: {} fonts", fonts.len());
+            }
+            for (idx, f) in fonts.iter().enumerate() {
+                if fonts.len() > 1 {
+                    println!("\nFont #{}: {} [{}]", idx + 1, f.name(), kind(f));
+                } else {
+                    println!("{}: {}", kind(f), f.name());
                 }
-                for (idx, f) in fonts.iter().enumerate() {
-                    if font_count > 1 {
-                        println!("\nFont #{}: {} ({:?})", idx + 1, f.name, f.font_type());
-                    } else {
-                        println!("TDF font: {} ({:?})", f.name, f.font_type());
-                    }
-                    println!("  Defined characters: {}", f.glyph_count());
-                }
+                let count = match f {
+                    Font::Figlet(f) => f.glyph_count(),
+                    Font::Tdf(f) => f.glyph_count(),
+                };
+                println!("  Defined characters: {count}");
             }
         }
     }
