@@ -253,6 +253,17 @@ Available features:
 - `convert`: Font conversion utilities (default, implies `tdf` and `figlet`)
 - `color`: Color rendering support
 - `serde`: `Serialize`/`Deserialize` support for glyph and render types
+- `native`: Full ZIP codec set including C-backed zstd and AES decryption (default, implies `pure-rust`)
+- `pure-rust`: Pure Rust ZIP decompression (deflate, deflate64, bzip2, lzma, xz, ppmd); no C toolchain required
+
+### WebAssembly / pure Rust builds
+
+Disable default features to drop the C-backed `native` codecs, e.g. for `wasm32-unknown-unknown`:
+
+```toml
+[dependencies]
+retrofont = { version = "0.2", default-features = false, features = ["pure-rust", "convert"] }
+```
 
 ## Performance Considerations
 
