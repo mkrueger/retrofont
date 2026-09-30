@@ -9,12 +9,41 @@ use std::sync::{Arc, OnceLock};
 use std::{fs, path::Path};
 use zip::ZipArchive;
 
+/// Bits of the FIGfont 2 `full_layout` header field that control horizontal layout.
+///
+/// Rules 1-6 (`EQUAL` ..= `HARDBLANK`) only take effect together with [`SMUSHING`].
+/// Without [`KERNING`] or [`SMUSHING`] glyphs are laid out at full width.
+pub mod layout {
+    /// Rule 1: two identical characters smush into one.
+    pub const EQUAL: u32 = 1;
+    /// Rule 2: an underscore is replaced by `|/\[]{}()<>`.
+    pub const UNDERSCORE: u32 = 2;
+    /// Rule 3: the character of the "higher" class wins (`|`, `/\`, `[]`, `{}`, `()`, `<>`).
+    pub const HIERARCHY: u32 = 4;
+    /// Rule 4: opposing brackets (`[]`, `{}`, `()`) become `|`.
+    pub const OPPOSITE_PAIR: u32 = 8;
+    /// Rule 5: `/\` -> `|`, `\/` -> `Y`, `><` -> `X`.
+    pub const BIG_X: u32 = 16;
+    /// Rule 6: two hard blanks smush into one.
+    pub const HARDBLANK: u32 = 32;
+    /// Mask of all horizontal smushing rules.
+    pub const RULES: u32 = 63;
+    /// Horizontal fitting: glyphs move together until they touch.
+    pub const KERNING: u32 = 64;
+    /// Horizontal smushing: glyphs overlap by one column where the rules allow it.
+    pub const SMUSHING: u32 = 128;
+}
+
 #[derive(Clone)]
 pub struct FigletFont {
     pub name: String,
     pub header: String,
     pub comments: Vec<String>,
     pub hard_blank: char,
+    // FIGfont 2 `full_layout` bits, see [`layout`].
+    full_layout: u32,
+    // 0 = left-to-right, 1 = right-to-left.
+    print_direction: u8,
     // Programmatic/converted glyphs live here.
     glyphs_overlay: [Option<Glyph>; 256],
     // Parsed glyphs are decoded on-demand.
@@ -44,9 +73,28 @@ impl FigletFont {
             header: String::new(),
             comments: Vec::new(),
             hard_blank: '$',
+            full_layout: 0,
+            print_direction: 0,
             glyphs_overlay: std::array::from_fn(|_| None),
             lazy: None,
         }
+    }
+
+    /// Horizontal layout bits (FIGfont 2 `full_layout`), see [`layout`].
+    ///
+    /// Fonts without a `full_layout` header field get it derived from `old_layout`.
+    pub fn layout(&self) -> u32 {
+        self.full_layout
+    }
+
+    /// Set the horizontal layout bits (see [`layout`]). Vertical layout bits are ignored.
+    pub fn set_layout(&mut self, full_layout: u32) {
+        self.full_layout = full_layout & (layout::RULES | layout::KERNING | layout::SMUSHING);
+    }
+
+    /// Print direction from the font header: 0 = left-to-right, 1 = right-to-left.
+    pub fn print_direction(&self) -> u8 {
+        self.print_direction
     }
 
     /// Safe access to a glyph by byte code (0-255).
@@ -193,9 +241,28 @@ impl FigletFont {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
+        // Layouts are optional hints; unreadable values fall back to full width.
+        let old_layout: i32 = header_parts
+            .get(4)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(-1);
+        let print_direction: u8 = header_parts
+            .get(6)
+            .and_then(|s| s.parse().ok())
+            .filter(|&d| d <= 1)
+            .unwrap_or(0);
+        let full_layout = match header_parts.get(7).and_then(|s| s.parse::<u32>().ok()) {
+            Some(full) => full,
+            None if old_layout == 0 => layout::KERNING,
+            None if old_layout < 0 => 0,
+            None => (old_layout as u32 & 31) | layout::SMUSHING,
+        };
+
         let mut font = FigletFont::new("figlet");
         font.header = header_line.to_string();
         font.hard_blank = hard_blank;
+        font.set_layout(full_layout);
+        font.print_direction = print_direction;
 
         // Read comment lines
         for _ in 0..comment_count {
@@ -315,11 +382,28 @@ impl FigletFont {
         let max_height = self.compute_max_height();
 
         // Write header line
-        // Format: flf2a<hardblank> height baseline maxlen smush comment_count
+        // Format: flf2a<hardblank> height baseline maxlen old_layout comment_count
+        //         print_direction full_layout
         let comment_count = self.comments.len();
+        let full_layout = self.full_layout;
+        let old_layout = if full_layout & layout::SMUSHING != 0 && full_layout & layout::RULES != 0
+        {
+            (full_layout & layout::RULES) as i32
+        } else if full_layout & (layout::SMUSHING | layout::KERNING) != 0 {
+            0
+        } else {
+            -1
+        };
         let header = format!(
-            "flf2a{} {} {} {} -1 {}\n",
-            self.hard_blank, max_height, max_height, 80, comment_count
+            "flf2a{} {} {} {} {} {} {} {}\n",
+            self.hard_blank,
+            max_height,
+            max_height,
+            80,
+            old_layout,
+            comment_count,
+            self.print_direction,
+            full_layout
         );
         out.extend(header.as_bytes());
 

@@ -162,77 +162,60 @@ impl Glyph {
     /// Edit mode exposes internal markers (HardBlank NBSP, '@', 'O', '&').
     /// Display mode hides them, treating them largely as spaces.
     pub fn render<T: FontTarget>(&self, target: &mut T, options: &RenderOptions) -> Result<()> {
-        let outline_style = options.outline_style;
         fn target_err<E: std::fmt::Display>(e: E) -> FontError {
             FontError::Target(e.to_string())
         }
         for part in &self.parts {
-            match part {
-                GlyphPart::NewLine => {
-                    target.next_line().map_err(target_err)?;
-                }
-                GlyphPart::EndMarker => {
-                    if options.render_mode == RenderMode::Edit {
-                        target
-                            .draw(Cell::new('&', None, None, false))
-                            .map_err(target_err)?;
-                    }
-                }
-                GlyphPart::HardBlank => {
-                    let ch = if options.render_mode == RenderMode::Edit {
-                        CP437_TO_UNICODE[0xFF]
-                    } else {
-                        ' '
-                    };
-                    target
-                        .draw(Cell::new(ch, None, None, false))
-                        .map_err(target_err)?;
-                }
-                GlyphPart::FillMarker => {
-                    let ch = if options.render_mode == RenderMode::Edit {
-                        '@'
-                    } else {
-                        ' '
-                    };
-                    target
-                        .draw(Cell::new(ch, None, None, false))
-                        .map_err(target_err)?;
-                }
-                GlyphPart::OutlineHole => {
-                    let ch = if options.render_mode == RenderMode::Edit {
-                        'O'
-                    } else {
-                        ' '
-                    };
-                    target
-                        .draw(Cell::new(ch, None, None, false))
-                        .map_err(target_err)?;
-                }
-                GlyphPart::OutlinePlaceholder(b) => {
-                    let ch = if options.render_mode == RenderMode::Edit {
-                        *b as char
-                    } else {
-                        transform_outline(outline_style, *b)
-                    };
-                    target
-                        .draw(Cell::new(ch, None, None, false))
-                        .map_err(target_err)?;
-                }
-                GlyphPart::Skip => {
-                    target.skip().map_err(target_err)?;
-                }
-                GlyphPart::Char(c) => {
-                    target
-                        .draw(Cell::new(*c, None, None, false))
-                        .map_err(target_err)?;
-                }
-                GlyphPart::AnsiChar { ch, fg, bg, blink } => {
-                    target
-                        .draw(Cell::new(*ch, Some(*fg), Some(*bg), *blink))
-                        .map_err(target_err)?;
+            match part.resolve(options) {
+                ResolvedPart::NewLine => target.next_line().map_err(target_err)?,
+                ResolvedPart::Nothing => {}
+                ResolvedPart::Skip => target.skip().map_err(target_err)?,
+                ResolvedPart::Draw(cell) | ResolvedPart::HardBlank(cell) => {
+                    target.draw(cell).map_err(target_err)?
                 }
             }
         }
         Ok(())
+    }
+}
+
+/// What a single [`GlyphPart`] turns into for a given set of render options.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ResolvedPart {
+    NewLine,
+    /// Produces no output and does not advance the cursor.
+    Nothing,
+    /// Transparent cell.
+    Skip,
+    Draw(Cell),
+    /// A FIGlet hard blank; drawn like [`ResolvedPart::Draw`] but kept distinct for smushing.
+    HardBlank(Cell),
+}
+
+impl GlyphPart {
+    pub(crate) fn resolve(&self, options: &RenderOptions) -> ResolvedPart {
+        let edit = options.render_mode == RenderMode::Edit;
+        let plain = |ch| ResolvedPart::Draw(Cell::new(ch, None, None, false));
+        match self {
+            GlyphPart::NewLine => ResolvedPart::NewLine,
+            GlyphPart::EndMarker if edit => plain('&'),
+            GlyphPart::EndMarker => ResolvedPart::Nothing,
+            GlyphPart::HardBlank => {
+                let ch = if edit { CP437_TO_UNICODE[0xFF] } else { ' ' };
+                ResolvedPart::HardBlank(Cell::new(ch, None, None, false))
+            }
+            GlyphPart::FillMarker => plain(if edit { '@' } else { ' ' }),
+            GlyphPart::OutlineHole => plain(if edit { 'O' } else { ' ' }),
+            GlyphPart::OutlinePlaceholder(b) => plain(if edit {
+                *b as char
+            } else {
+                transform_outline(options.outline_style, *b)
+            }),
+            GlyphPart::Skip => ResolvedPart::Skip,
+            GlyphPart::Char(c) => plain(*c),
+            GlyphPart::AnsiChar { ch, fg, bg, blink } => {
+                ResolvedPart::Draw(Cell::new(*ch, Some(*fg), Some(*bg), *blink))
+            }
+        }
     }
 }

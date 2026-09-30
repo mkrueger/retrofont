@@ -10,6 +10,7 @@ A Rust library and CLI toolkit for working with retro ASCII/ANSI art fonts, supp
 - 🔄 **Format Conversion**: Convert FIGlet fonts to TDF with compatibility checking
 - 🌍 **Unicode Support**: Automatic CP437 to Unicode conversion with proper character mapping
 - 🎭 **Rendering Modes**: Display mode for final output, Edit mode for font development
+- 📐 **Text Layout**: FIGlet-compatible kerning and smushing, multi-line text, word wrapping and justification
 - 📦 **Bundle Support**: Handle TDF files containing multiple fonts
 - 🗜️ **Archive Support**: Load fonts from ZIP files
 - 🎨 **Color Support**: Full 16-color DOS palette with authentic VGA RGB values
@@ -44,6 +45,12 @@ retrofont render --font fonts/block.tdf --text "Debug" --edit
 
 # Render outline font with different styles (0-18)
 retrofont render --font fonts/outline.tdf --text "Style" --outline 5
+
+# Choose how glyphs are joined: default (font header), full, kern or smush
+retrofont render --font fonts/doom.flf --text "Hello" --layout kern
+
+# Multi-line text, wrapped at 60 columns and centered
+retrofont render --font fonts/doom.flf --text $'Hello\nWorld' --width 60 --justify center
 
 # Convert FIGlet to TDF
 retrofont convert --input font.flf --output font.tdf --type block
@@ -128,6 +135,26 @@ impl FontTarget for HtmlTarget {
         self.output.push(' ');
         Ok(())
     }
+}
+```
+
+### Text Layout
+
+`Font::render_str` renders whole strings with FIGlet-style kerning/smushing,
+`'\n'` line breaks, word wrapping and justification:
+
+```rust
+use retrofont::{Font, Justify, TextOptions, test_support::MemoryBufferTarget};
+
+fn banner(font: &Font) -> retrofont::Result<MemoryBufferTarget> {
+    let mut target = MemoryBufferTarget::new();
+    let options = TextOptions {
+        justify: Justify::Center,
+        max_width: Some(79),
+        ..TextOptions::default()
+    };
+    font.render_str(&mut target, "Hello\nWorld", &options)?;
+    Ok(target)
 }
 ```
 

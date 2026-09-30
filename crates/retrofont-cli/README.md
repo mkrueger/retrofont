@@ -31,7 +31,17 @@ retrofont render --font fonts/outline.tdf --text "Debug" --edit
 
 # Outline font with specific style (0-18)
 retrofont render --font fonts/outline.tdf --text "Style" --outline 5
+
+# Choose how glyphs are joined: default (font header), full, kern or smush
+retrofont render --font fonts/doom.flf --text "Hello" --layout kern
+
+# Multi-line text, wrapped at 60 columns and centered
+retrofont render --font fonts/doom.flf --text $'Hello\nWorld' --width 60 --justify center
 ```
+
+FIGlet fonts are kerned or smushed as their header specifies (like `figlet`);
+`--layout` overrides this. `--width` wraps long lines at word boundaries, and
+`--justify left|center|right` aligns each line within that width.
 
 ### Convert Fonts
 

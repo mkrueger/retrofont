@@ -8,9 +8,11 @@ mod font;
 mod glyph;
 pub use glyph::{OUTLINE_CHAR_SET_UNICODE, transform_outline};
 pub mod tdf;
+mod text;
 pub use error::{FontError, Result};
 pub use font::Font;
 pub use glyph::{Glyph, GlyphPart, RenderMode, RenderOptions};
+pub use text::{Justify, Layout, MissingGlyph, TextOptions};
 
 // Test utilities
 #[cfg(feature = "test-support")]

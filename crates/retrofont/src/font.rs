@@ -2,7 +2,10 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 
 use crate::{
-    FontError, FontTarget, Result, figlet::FigletFont, glyph::RenderOptions, tdf::TdfFont,
+    FontError, FontTarget, Result,
+    figlet::FigletFont,
+    glyph::{Glyph, RenderOptions},
+    tdf::TdfFont,
 };
 
 /// Unified font enum encapsulating all supported font kinds.
@@ -61,6 +64,28 @@ impl Font {
         }
     }
 
+    /// The character to render for `ch`: itself, or its opposite case if only that exists.
+    pub(crate) fn resolve_char(&self, ch: char) -> Option<char> {
+        if self.has_char(ch) {
+            return Some(ch);
+        }
+        let other = if ch.is_lowercase() {
+            ch.to_uppercase().next()
+        } else if ch.is_uppercase() {
+            ch.to_lowercase().next()
+        } else {
+            None
+        };
+        other.filter(|&c| self.has_char(c))
+    }
+
+    pub(crate) fn glyph(&self, ch: char) -> Option<&Glyph> {
+        match self {
+            Font::Figlet(f) => f.glyph(ch),
+            Font::Tdf(f) => f.glyph(ch),
+        }
+    }
+
     pub fn render_glyph<T: FontTarget>(
         &self,
         target: &mut T,
@@ -81,34 +106,7 @@ impl Font {
             return Ok(());
         }
 
-        // Try to find the character or its case variant
-        let char_to_render = if self.has_char(ch) {
-            ch
-        } else if ch.is_alphabetic() {
-            // Try the opposite case if the original character is not found
-            if ch.is_lowercase() {
-                let upper = ch.to_uppercase().next().unwrap_or(ch);
-                if self.has_char(upper) {
-                    upper
-                } else {
-                    ch // Fall back to original if uppercase not found
-                }
-            } else {
-                let lower = ch.to_lowercase().next().unwrap_or(ch);
-                if self.has_char(lower) {
-                    lower
-                } else {
-                    ch // Fall back to original if lowercase not found
-                }
-            }
-        } else {
-            ch
-        };
-
-        let glyph = match self {
-            Font::Figlet(f) => f.glyph(char_to_render),
-            Font::Tdf(f) => f.glyph(char_to_render),
-        };
+        let glyph = self.resolve_char(ch).and_then(|c| self.glyph(c));
         let Some(glyph) = glyph else {
             return Err(FontError::UnknownChar(ch));
         };

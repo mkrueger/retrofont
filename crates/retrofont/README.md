@@ -8,6 +8,7 @@ A Rust library for parsing, rendering, and converting retro ASCII/ANSI art fonts
 - 🔄 **Format Conversion**: Convert FIGlet fonts to TDF with compatibility checking
 - 🌍 **Unicode Support**: Automatic CP437 to Unicode conversion with proper character mapping
 - 🎭 **Rendering Modes**: Display mode for final output, Edit mode for font development
+- 📐 **Text Layout**: FIGlet-compatible kerning and smushing, multi-line text, word wrapping and justification
 - 📦 **Bundle Support**: Handle TDF files containing multiple fonts
 - 🗜️ **Archive Support**: Load FIGlet fonts from ZIP files
 - 🎨 **Color Support**: Full 16-color DOS palette with blink attribute
@@ -25,7 +26,7 @@ retrofont = "0.2"
 ## Quick Start
 
 ```rust,no_run
-use retrofont::{test_support::MemoryBufferTarget, Font, RenderOptions};
+use retrofont::{test_support::MemoryBufferTarget, Font, TextOptions};
 
 fn main() -> retrofont::Result<()> {
     // Load a font (auto-detects format)
@@ -35,12 +36,9 @@ fn main() -> retrofont::Result<()> {
 
     // Create a rendering target
     let mut target = MemoryBufferTarget::new();
-    let options = RenderOptions::default();
 
-    // Render text one character at a time
-    for ch in "HELLO".chars() {
-        font.render_glyph(&mut target, ch, &options)?;
-    }
+    // Render a whole string; FIGlet fonts are kerned/smushed like `figlet` does
+    font.render_str(&mut target, "HELLO", &TextOptions::default())?;
 
     // Inspect the result
     for line in &target.lines {
@@ -177,6 +175,39 @@ let opts = RenderOptions {
 };
 ```
 
+## Text Layout
+
+`Font::render_str` lays out whole strings. `'\n'` starts a new line of glyphs,
+and `TextOptions` controls how glyphs are joined and lines are arranged:
+
+```rust
+use retrofont::{Font, Justify, Layout, MissingGlyph, TextOptions, figlet::FigletFont};
+
+let mut fig = FigletFont::new("demo");
+fig.add_raw_char(b'H', &["H  H", "HHHH", "H  H"]);
+fig.add_raw_char(b'I', &["III", " I ", "III"]);
+let font = Font::Figlet(Box::new(fig));
+
+let options = TextOptions {
+    layout: Layout::Kerning,      // FontDefault, FullWidth, Kerning or Smushing
+    justify: Justify::Center,     // Left, Center or Right
+    max_width: Some(40),          // wrap at spaces (mid-word if a word is too long)
+    missing: MissingGlyph::Skip,  // or Error (default)
+    ..TextOptions::default()
+};
+let (width, height) = font.measure("HI\nIH", &options)?;
+assert_eq!((width, height), (7, 6));
+# Ok::<(), retrofont::FontError>(())
+```
+
+`Layout::FontDefault` uses the layout from the FIGlet header (`old_layout` /
+`full_layout`), including all six horizontal smushing rules; TDF fonts are laid
+out at full width. Use `FigletFont::layout` / `set_layout` with the bits in
+`figlet::layout` to inspect or change a font's layout. Transparent cells
+(padding, gaps) are emitted through `FontTarget::skip`.
+
+`Font::render_glyph` is still available to render a single glyph.
+
 ## Stream-based Loading
 
 Load fonts from any `Read` source:
@@ -199,6 +230,7 @@ For zero-copy loading of an owned buffer, use `Font::load_owned` or
 
 - Text-based ASCII art fonts
 - Supports hard blanks (non-breaking spaces)
+- Horizontal kerning and smushing as specified by the font header
 - ZIP archive support for compressed fonts
 - Character range: ASCII printable + extended
 

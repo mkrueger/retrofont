@@ -1,7 +1,7 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use retrofont::{
-    Font, RenderOptions,
+    Font, Justify, Layout, RenderOptions, TextOptions,
     convert::figlet_to_tdf,
     figlet::FigletFont,
     tdf::{TdfFont, TdfFontType},
@@ -27,6 +27,46 @@ fn validate_outline_style(s: &str) -> Result<usize, String> {
     }
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum LayoutArg {
+    /// The font's own layout
+    Default,
+    /// Every glyph at full width
+    Full,
+    /// Move glyphs together until they touch
+    Kern,
+    /// Overlap glyphs using the font's smushing rules
+    Smush,
+}
+
+impl From<LayoutArg> for Layout {
+    fn from(arg: LayoutArg) -> Self {
+        match arg {
+            LayoutArg::Default => Layout::FontDefault,
+            LayoutArg::Full => Layout::FullWidth,
+            LayoutArg::Kern => Layout::Kerning,
+            LayoutArg::Smush => Layout::Smushing,
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum JustifyArg {
+    Left,
+    Center,
+    Right,
+}
+
+impl From<JustifyArg> for Justify {
+    fn from(arg: JustifyArg) -> Self {
+        match arg {
+            JustifyArg::Left => Justify::Left,
+            JustifyArg::Center => Justify::Center,
+            JustifyArg::Right => Justify::Right,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "retrofont", about = "Retro font toolkit CLI")]
 struct Cli {
@@ -41,8 +81,23 @@ enum Cmd {
     Render {
         #[arg(short, long)]
         font: String,
-        #[arg(short, long)]
+        #[arg(
+            short,
+            long,
+            help = "Text to render; newlines start a new line of glyphs"
+        )]
         text: String,
+        #[arg(
+            long,
+            value_enum,
+            default_value = "default",
+            help = "Horizontal glyph layout"
+        )]
+        layout: LayoutArg,
+        #[arg(long, value_enum, default_value = "left")]
+        justify: JustifyArg,
+        #[arg(short, long, help = "Wrap lines wider than this many columns")]
+        width: Option<usize>,
         #[arg(long, default_value = "7")]
         fg: u8,
         #[arg(long, default_value = "0")]
@@ -93,6 +148,9 @@ fn main() -> Result<()> {
         Cmd::Render {
             font,
             text,
+            layout,
+            justify,
+            width,
             edit,
             outline,
             num,
@@ -141,7 +199,14 @@ fn main() -> Result<()> {
                     || anyhow::anyhow!("Font #{num} not found in TDF bundle"),
                 )?))
             };
-            let ansi = render_to_ansi(&font_enum, &text, &mode)?;
+            let options = TextOptions {
+                render: mode,
+                layout: layout.into(),
+                justify: justify.into(),
+                max_width: width,
+                ..TextOptions::default()
+            };
+            let ansi = render_to_ansi(&font_enum, &text, &options)?;
             println!("{ansi}");
         }
 
