@@ -236,8 +236,8 @@ impl TdfFont {
             }
             let mut lookup: [u16; CHAR_TABLE_SIZE] = [0u16; CHAR_TABLE_SIZE];
             let table = &b[o..o + CHAR_TABLE_SIZE * 2];
-            for (slot, entry) in lookup.iter_mut().zip(table.chunks_exact(2)) {
-                *slot = u16::from_le_bytes([entry[0], entry[1]]);
+            for (slot, entry) in lookup.iter_mut().zip(table.as_chunks::<2>().0) {
+                *slot = u16::from_le_bytes(*entry);
             }
             o += CHAR_TABLE_SIZE * 2;
             if o + block_size > b.len() {
