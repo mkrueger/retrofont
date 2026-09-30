@@ -26,6 +26,7 @@ pub enum FontError {
     FigletIncompleteComments,
     #[error("FIGlet: incomplete character definition")]
     FigletIncompleteChar,
+    /// No longer produced: any character can end a glyph line, as in figlet.
     #[error("FIGlet: character line missing @ marker")]
     FigletMissingMarker,
 

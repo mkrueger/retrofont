@@ -10,6 +10,6 @@ fn test_zipped_equals_plain() {
     let zipped_font = FigletFont::load_file(&doom_zip).unwrap();
     assert_eq!(test_font.header, zipped_font.header);
     assert_eq!(test_font.glyph_count(), zipped_font.glyph_count());
-    let doom_font_glyph_count = 96; // ASCII printable + space + extended
+    let doom_font_glyph_count = 95 + 7; // ASCII printable + space + German
     assert_eq!(doom_font_glyph_count, test_font.glyph_count());
 }

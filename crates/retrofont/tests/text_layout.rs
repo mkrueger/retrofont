@@ -348,3 +348,38 @@ fn tdf_text_matches_individual_glyphs() {
     let (bw, bh) = font.glyph_size('b').unwrap();
     assert_eq!(font.measure("ab", &options).unwrap(), (aw + bw, ah.max(bh)));
 }
+
+#[test]
+fn skipped_characters_use_the_missing_glyph_like_figlet() {
+    let mut fig = FigletFont::new("zero");
+    fig.add_raw_char(b'a', &["aa"]);
+    fig.add_char('\0', &["?"]);
+    let font = Font::Figlet(Box::new(fig));
+    let skip = TextOptions {
+        missing: MissingGlyph::Skip,
+        ..TextOptions::default()
+    };
+    assert_eq!(render(&font, "a\u{1}a", &skip), ["aa?aa"]);
+}
+
+#[test]
+fn skipped_characters_block_smushing_like_figlet() {
+    let font = font(layout::SMUSHING, &[(b'L', "a|"), (b'R', "|b")]);
+    let skip = TextOptions {
+        missing: MissingGlyph::Skip,
+        ..TextOptions::default()
+    };
+    assert_eq!(render(&font, "LR", &skip), ["a|b"]);
+    assert_eq!(render(&font, "L?R", &skip), ["a||b"]);
+}
+
+#[test]
+fn case_fallback_ignores_multi_character_mappings() {
+    // 'ß' uppercases to "SS"; it must not fall back to 'S'.
+    let font = font(0, &[(b'S', "S")]);
+    let mut target = MemoryBufferTarget::new();
+    let err = font
+        .render_str(&mut target, "ß", &TextOptions::default())
+        .unwrap_err();
+    assert!(matches!(err, FontError::UnknownChar('ß')));
+}

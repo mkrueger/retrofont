@@ -69,10 +69,15 @@ impl Font {
         if self.has_char(ch) {
             return Some(ch);
         }
+        // Only single-character mappings: 'ß' uppercases to "SS", not 'S'.
+        fn single(mut chars: impl Iterator<Item = char>) -> Option<char> {
+            let c = chars.next()?;
+            chars.next().is_none().then_some(c)
+        }
         let other = if ch.is_lowercase() {
-            ch.to_uppercase().next()
+            single(ch.to_uppercase())
         } else if ch.is_uppercase() {
-            ch.to_lowercase().next()
+            single(ch.to_lowercase())
         } else {
             None
         };

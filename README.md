@@ -68,7 +68,10 @@ retrofont inspect --font fonts/bundle.tdf
 FIGlet (Frank, Ian & Glenn's letters) fonts are text-based ASCII art fonts:
 
 - **Header**: Contains metadata like height, baseline, hard blank character
-- **Character Set**: Supports ASCII printable range (32-126) plus extended codes
+- **Character Set**: ASCII printable range (32-126), the German letters (ÄÖÜäöüß) and
+  code-tagged characters anywhere in Unicode
+- **Encoding**: UTF-8, with a Latin-1 fallback for older fonts
+- **End Marks**: Any character may end glyph lines (usually `@`), as in figlet
 - **Hard Blanks**: Special character (often `$`) representing non-breaking spaces
 - **Stream Loading**: Supports `Font::read()` for memory-efficient loading
 

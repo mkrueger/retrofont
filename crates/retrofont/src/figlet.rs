@@ -3,6 +3,8 @@ use crate::{
     error::{FontError, Result},
     glyph::{Glyph, GlyphPart},
 };
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Read};
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
@@ -34,6 +36,9 @@ pub mod layout {
     pub const SMUSHING: u32 = 128;
 }
 
+/// The characters that follow the 95 required ASCII glyphs in a FIGfont, in file order.
+const DEUTSCH: [char; 7] = ['Ä', 'Ö', 'Ü', 'ä', 'ö', 'ü', 'ß'];
+
 #[derive(Clone)]
 pub struct FigletFont {
     pub name: String,
@@ -44,24 +49,51 @@ pub struct FigletFont {
     full_layout: u32,
     // 0 = left-to-right, 1 = right-to-left.
     print_direction: u8,
-    // Programmatic/converted glyphs live here.
-    glyphs_overlay: [Option<Glyph>; 256],
+    // Programmatic/converted glyphs live here and take precedence over parsed ones.
+    glyphs_overlay: BTreeMap<char, Glyph>,
     // Parsed glyphs are decoded on-demand.
     lazy: Option<LazyFigletSource>,
+}
+
+/// Text encoding of a font file. FIGlet predates UTF-8, so files that aren't
+/// valid UTF-8 are read as Latin-1 like C figlet does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Encoding {
+    Utf8,
+    Latin1,
+}
+
+impl Encoding {
+    fn detect(bytes: &[u8]) -> Self {
+        if std::str::from_utf8(bytes).is_ok() {
+            Encoding::Utf8
+        } else {
+            Encoding::Latin1
+        }
+    }
+
+    fn decode(self, bytes: &[u8]) -> Cow<'_, str> {
+        match self {
+            // Lossless: the whole file was validated and lines split on ASCII bytes.
+            Encoding::Utf8 => String::from_utf8_lossy(bytes),
+            Encoding::Latin1 => Cow::Owned(bytes.iter().map(|&b| char::from(b)).collect()),
+        }
+    }
 }
 
 #[derive(Clone)]
 struct LazyFigletSource {
     bytes: Arc<[u8]>,
+    encoding: Encoding,
     hard_blank: char,
-    // One entry per glyph line, in parse order.
+    // One entry per glyph line with end marks removed, in parse order.
     glyph_lines: Vec<Range<usize>>,
-    // For each byte code (0..=255): start index into `glyph_lines` or u32::MAX.
-    glyph_line_start: [u32; 256],
-    // Number of lines for this glyph.
-    glyph_line_len: [u8; 256],
+    // Character -> index into `glyphs` and `cache`.
+    index: BTreeMap<char, usize>,
+    // Per glyph: its rows as a range into `glyph_lines`.
+    glyphs: Vec<Range<usize>>,
     // Cached decoded glyphs.
-    cache: Arc<[OnceLock<Glyph>; 256]>,
+    cache: Arc<[OnceLock<Glyph>]>,
     // Precomputed spacing hint (average max line width).
     avg_width: Option<usize>,
 }
@@ -75,7 +107,7 @@ impl FigletFont {
             hard_blank: '$',
             full_layout: 0,
             print_direction: 0,
-            glyphs_overlay: std::array::from_fn(|_| None),
+            glyphs_overlay: BTreeMap::new(),
             lazy: None,
         }
     }
@@ -97,30 +129,29 @@ impl FigletFont {
         self.print_direction
     }
 
-    /// Safe access to a glyph by byte code (0-255).
+    /// The glyph for `ch`, if the font defines it.
     pub fn glyph(&self, ch: char) -> Option<&Glyph> {
-        let code = ch as u32;
-        if code > u8::MAX as u32 {
-            return None;
-        }
-        let idx = code as usize;
-
-        if let Some(g) = self.glyphs_overlay[idx].as_ref() {
+        if let Some(g) = self.glyphs_overlay.get(&ch) {
             return Some(g);
         }
         let lazy = self.lazy.as_ref()?;
-        if lazy.glyph_line_start[idx] == u32::MAX {
-            return None;
-        }
+        let &idx = lazy.index.get(&ch)?;
         Some(lazy.cache[idx].get_or_init(|| decode_glyph(lazy, idx)))
     }
 
-    /// Iterate over all defined FIGlet glyphs as (char, &Glyph).
+    /// Iterate over all defined FIGlet glyphs as (char, &Glyph), ordered by character.
     pub fn iter_glyphs(&self) -> impl Iterator<Item = (char, &Glyph)> {
-        (0u16..=255).filter_map(move |i| {
-            let ch = (i as u8) as char;
-            self.glyph(ch).map(|g| (ch, g))
-        })
+        self.defined_chars()
+            .into_iter()
+            .filter_map(move |ch| self.glyph(ch).map(|g| (ch, g)))
+    }
+
+    fn defined_chars(&self) -> BTreeSet<char> {
+        let mut chars: BTreeSet<char> = self.glyphs_overlay.keys().copied().collect();
+        if let Some(lazy) = &self.lazy {
+            chars.extend(lazy.index.keys().copied());
+        }
+        chars
     }
 
     pub fn load_file(path: &Path) -> Result<Self> {
@@ -129,19 +160,7 @@ impl FigletFont {
     }
 
     pub fn glyph_count(&self) -> usize {
-        let mut count = 0usize;
-        for i in 0..256 {
-            if self.glyphs_overlay[i].is_some() {
-                count += 1;
-                continue;
-            }
-            if let Some(lazy) = &self.lazy
-                && lazy.glyph_line_start[i] != u32::MAX
-            {
-                count += 1;
-            }
-        }
-        count
+        self.defined_chars().len()
     }
 
     /// Calculate the average width of defined glyphs (excluding space if undefined).
@@ -156,7 +175,7 @@ impl FigletFont {
         // Fallback: compute from overlay glyphs.
         let mut total = 0usize;
         let mut count = 0usize;
-        for g in self.glyphs_overlay.iter().flatten() {
+        for g in self.glyphs_overlay.values() {
             total += g.width;
             count += 1;
         }
@@ -201,9 +220,7 @@ impl FigletFont {
     }
 
     fn parse_bytes(bytes: Arc<[u8]>) -> Result<Self> {
-        // Validate UTF-8 once; we will slice by newline boundaries thereafter.
-        let _ = std::str::from_utf8(bytes.as_ref())?;
-
+        let encoding = Encoding::detect(bytes.as_ref());
         let line_ranges = compute_line_ranges(bytes.as_ref());
         if line_ranges.is_empty() {
             return Err(FontError::FigletMissingHeader);
@@ -211,7 +228,7 @@ impl FigletFont {
 
         let mut line_idx = 0usize;
         let header_range = line_ranges[line_idx].clone();
-        let header_line = std::str::from_utf8(&bytes[header_range.clone()])?;
+        let header_line = encoding.decode(&bytes[header_range]).into_owned();
         line_idx += 1;
         if !header_line.starts_with("flf2a") {
             return Err(FontError::FigletInvalidSignature);
@@ -271,84 +288,84 @@ impl FigletFont {
             }
             let r = line_ranges[line_idx].clone();
             line_idx += 1;
-            let c = std::str::from_utf8(&bytes[r])?;
-            font.comments.push(c.to_string());
+            font.comments.push(encoding.decode(&bytes[r]).into_owned());
         }
 
-        // Parse glyphs lazily: record slices per glyph.
-        let mut glyph_lines: Vec<Range<usize>> = Vec::new();
-        let mut glyph_line_start: [u32; 256] = [u32::MAX; 256];
-        let mut glyph_line_len: [u8; 256] = [0u8; 256];
-        let mut sum_width = 0usize;
-        let mut count = 0usize;
+        // Parse glyphs lazily: record the line slices of each glyph.
+        let mut reader = GlyphReader {
+            bytes: bytes.as_ref(),
+            lines: &line_ranges,
+            pos: line_idx,
+            height,
+            encoding,
+        };
+        let mut builder = LazyBuilder::default();
 
-        // Load required characters (ASCII 32-126) = 95 chars
-        for ch in 32u8..=126u8 {
-            let ranges =
-                read_character_ranges(&line_ranges, &mut line_idx, height, bytes.as_ref())?;
-            let start = glyph_lines.len();
-            let mut max_w = 0usize;
-            for r in &ranges {
-                max_w = max_w.max(r.end.saturating_sub(r.start));
-            }
-            glyph_lines.extend(ranges);
-            glyph_line_start[ch as usize] = start as u32;
-            glyph_line_len[ch as usize] = (glyph_lines.len() - start) as u8;
-            sum_width += max_w;
-            count += 1;
+        for ch in ' '..='~' {
+            let rows = reader.read_glyph().ok_or(FontError::FigletIncompleteChar)?;
+            builder.add(ch, rows);
         }
 
-        // Try to load one more character (often 127 or extended chars)
-        if let Ok(ranges) =
-            read_character_ranges(&line_ranges, &mut line_idx, height, bytes.as_ref())
+        // Older fonts end after the required ASCII set.
+        for ch in DEUTSCH {
+            let Some(rows) = reader.read_glyph() else {
+                break;
+            };
+            // Blank glyphs stay defined with zero width, as in figlet.
+            builder.add(ch, rows);
+        }
+
+        // Code-tagged glyphs: a line starting with the character code, then the glyph.
+        // Like figlet, stop at the first line that isn't a code tag.
+        while let Some(code) = reader
+            .next_line()
+            .and_then(|tag| parse_code_tag(&encoding.decode(tag)))
         {
-            let start = glyph_lines.len();
-            let mut max_w = 0usize;
-            for r in &ranges {
-                max_w = max_w.max(r.end.saturating_sub(r.start));
+            let Some(rows) = reader.read_glyph() else {
+                break;
+            };
+            // Negative codes are font-private and can't be typed.
+            if let Some(ch) = u32::try_from(code).ok().and_then(char::from_u32) {
+                builder.add(ch, rows);
             }
-            glyph_lines.extend(ranges);
-            glyph_line_start[127] = start as u32;
-            glyph_line_len[127] = (glyph_lines.len() - start) as u8;
-            sum_width += max_w;
-            count += 1;
         }
 
-        // Load additional tagged characters if any remain (skip)
-        while read_character_ranges(&line_ranges, &mut line_idx, height, bytes.as_ref()).is_ok() {
-            // Tagged characters would need special handling - skip for now
-        }
-
-        let cache: Arc<[OnceLock<Glyph>; 256]> = Arc::new(std::array::from_fn(|_| OnceLock::new()));
-        let avg_width = sum_width.checked_div(count);
+        let cache: Arc<[OnceLock<Glyph>]> =
+            builder.glyphs.iter().map(|_| OnceLock::new()).collect();
         font.lazy = Some(LazyFigletSource {
             bytes,
+            encoding,
             hard_blank,
-            glyph_lines,
-            glyph_line_start,
-            glyph_line_len,
+            glyph_lines: builder.glyph_lines,
+            index: builder.index,
+            glyphs: builder.glyphs,
             cache,
-            avg_width,
+            avg_width: builder.sum_width.checked_div(builder.required),
         });
 
         Ok(font)
     }
 
+    /// Add (or replace) the glyph for a Latin-1 character code.
     pub fn add_raw_char(&mut self, ch: u8, raw_lines: &[&str]) {
-        // Build parts with proper NewLine separators & compute width/height in one pass.
+        self.add_char(char::from(ch), raw_lines);
+    }
+
+    /// Add (or replace) the glyph for `ch`, one string per row.
+    /// Occurrences of [`hard_blank`](Self::hard_blank) become hard blanks.
+    pub fn add_char(&mut self, ch: char, raw_lines: &[&str]) {
         let mut parts = Vec::new();
         let mut max_width = 0usize;
         for (row, line) in raw_lines.iter().enumerate() {
             if row > 0 {
                 parts.push(GlyphPart::NewLine);
             }
-            max_width = max_width.max(line.len());
-            for ch in line.chars() {
-                // Convert hard blank character to HardBlank GlyphPart
-                if ch == self.hard_blank {
+            max_width = max_width.max(line.chars().count());
+            for c in line.chars() {
+                if c == self.hard_blank {
                     parts.push(GlyphPart::HardBlank);
                 } else {
-                    parts.push(GlyphPart::Char(ch));
+                    parts.push(GlyphPart::Char(c));
                 }
             }
         }
@@ -357,21 +374,15 @@ impl FigletFont {
             height: raw_lines.len(),
             parts,
         };
-        self.glyphs_overlay[ch as usize] = Some(glyph);
+        self.glyphs_overlay.insert(ch, glyph);
     }
 
     pub fn has_char(&self, ch: char) -> bool {
-        let code = ch as u32;
-        if code > u8::MAX as u32 {
-            return false;
-        }
-        let idx = code as usize;
-        if self.glyphs_overlay[idx].is_some() {
-            return true;
-        }
-        self.lazy
-            .as_ref()
-            .is_some_and(|lazy| lazy.glyph_line_start[idx] != u32::MAX)
+        self.glyphs_overlay.contains_key(&ch)
+            || self
+                .lazy
+                .as_ref()
+                .is_some_and(|lazy| lazy.index.contains_key(&ch))
     }
 
     /// Serialize this FIGlet font to bytes in .flf format.
@@ -413,27 +424,39 @@ impl FigletFont {
             out.push(b'\n');
         }
 
-        // Write glyphs for ASCII 32-126 (required characters)
-        for ch in 32u8..=126u8 {
-            self.write_glyph_lines(&mut out, ch as char, max_height);
+        // Required ASCII glyphs.
+        for ch in ' '..='~' {
+            self.write_glyph_lines(&mut out, ch, max_height);
         }
 
-        // Write glyph for ASCII 127 if present
-        if self.has_char(127 as char) {
-            self.write_glyph_lines(&mut out, 127 as char, max_height);
+        // The German glyphs are positional and must precede code-tagged glyphs;
+        // missing ones are written as blank (zero-width) glyphs.
+        let tagged: Vec<char> = self
+            .defined_chars()
+            .into_iter()
+            .filter(|ch| !(' '..='~').contains(ch) && !DEUTSCH.contains(ch))
+            .collect();
+        if !tagged.is_empty() || DEUTSCH.iter().any(|&ch| self.has_char(ch)) {
+            for ch in DEUTSCH {
+                self.write_glyph_lines(&mut out, ch, max_height);
+            }
+        }
+
+        // Hex tags are the form every FIGlet implementation understands.
+        for ch in tagged {
+            out.extend(format!("0x{:04X}\n", ch as u32).as_bytes());
+            self.write_glyph_lines(&mut out, ch, max_height);
         }
 
         Ok(out)
     }
 
     fn compute_max_height(&self) -> usize {
-        let mut max_h = 1usize;
-        for ch in 32u8..=127u8 {
-            if let Some(g) = self.glyph(ch as char) {
-                max_h = max_h.max(g.height);
-            }
-        }
-        max_h
+        self.iter_glyphs()
+            .map(|(_, g)| g.height)
+            .max()
+            .unwrap_or(1)
+            .max(1)
     }
 
     fn write_glyph_lines(&self, out: &mut Vec<u8>, ch: char, max_height: usize) {
@@ -470,14 +493,17 @@ impl FigletFont {
                 lines.push(String::new());
             }
 
-            // Write lines with @ markers
+            // End marks are chosen per line; avoid one that the line itself ends with,
+            // since readers strip the whole trailing run of the end mark.
             for (i, line) in lines.iter().enumerate() {
+                let mark = if line.ends_with('@') { '#' } else { '@' };
                 out.extend(line.as_bytes());
-                if i == lines.len() - 1 {
-                    out.extend(b"@@\n"); // Last line gets @@
-                } else {
-                    out.extend(b"@\n");
-                }
+                out.extend(
+                    mark.to_string()
+                        .repeat(if i == lines.len() - 1 { 2 } else { 1 })
+                        .as_bytes(),
+                );
+                out.push(b'\n');
             }
         } else {
             // Write empty glyph placeholder
@@ -517,52 +543,127 @@ fn compute_line_ranges(bytes: &[u8]) -> Vec<Range<usize>> {
     out
 }
 
-fn read_character_ranges(
-    lines: &[Range<usize>],
-    line_idx: &mut usize,
+struct GlyphReader<'a> {
+    bytes: &'a [u8],
+    lines: &'a [Range<usize>],
+    pos: usize,
     height: usize,
-    bytes: &[u8],
-) -> Result<Vec<Range<usize>>> {
-    let mut out = Vec::with_capacity(height);
-    for row in 0..height {
-        let r = lines
-            .get(*line_idx)
-            .ok_or(FontError::FigletIncompleteChar)?
-            .clone();
-        *line_idx += 1;
-        let line = &bytes[r.clone()];
-        if line.ends_with(b"@@") {
-            if row + 1 != height {
-                return Err(FontError::FigletIncompleteChar);
-            }
-            out.push(r.start..(r.end - 2));
-            break;
-        }
-        if line.ends_with(b"@") {
-            out.push(r.start..(r.end - 1));
-            continue;
-        }
-        return Err(FontError::FigletMissingMarker);
+    encoding: Encoding,
+}
+
+/// One glyph row: the content range (end marks removed) and its width in characters.
+type Row = (Range<usize>, usize);
+
+impl<'a> GlyphReader<'a> {
+    fn next_line(&mut self) -> Option<&'a [u8]> {
+        let r = self.lines.get(self.pos)?.clone();
+        self.pos += 1;
+        Some(&self.bytes[r])
     }
-    Ok(out)
+
+    /// Read the next `height` lines as a glyph; `None` if the file ends first.
+    fn read_glyph(&mut self) -> Option<Vec<Row>> {
+        let lines = self.lines.get(self.pos..self.pos + self.height)?;
+        self.pos += self.height;
+        Some(
+            lines
+                .iter()
+                .map(|r| strip_end_marks(self.bytes, r.clone(), self.encoding))
+                .collect(),
+        )
+    }
+}
+
+/// Remove trailing whitespace, then the run of the line's last character (its end mark),
+/// like C figlet's `readfontchar`.
+fn strip_end_marks(bytes: &[u8], line: Range<usize>, encoding: Encoding) -> Row {
+    let s = &bytes[line.clone()];
+    let mut end = s.len();
+    while end > 0 && matches!(s[end - 1], b' ' | b'\t' | b'\r' | b'\n' | 0x0B | 0x0C) {
+        end -= 1;
+    }
+    let (end, width) = match encoding {
+        Encoding::Latin1 => {
+            if let Some(&mark) = s[..end].last() {
+                while end > 0 && s[end - 1] == mark {
+                    end -= 1;
+                }
+            }
+            (end, end)
+        }
+        Encoding::Utf8 => {
+            // Only ASCII was stripped, so `end` is still a char boundary.
+            let text = std::str::from_utf8(&s[..end]).unwrap_or_default();
+            let text = match text.chars().next_back() {
+                Some(mark) => text.trim_end_matches(mark),
+                None => text,
+            };
+            (text.len(), text.chars().count())
+        }
+    };
+    (line.start..line.start + end, width)
+}
+
+/// Parse a code tag like C's `%li`: decimal, `0x` hex or `0`-prefixed octal, optionally signed.
+fn parse_code_tag(line: &str) -> Option<i64> {
+    let token = line.split_whitespace().next()?;
+    let (negative, digits) = match token.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, token.strip_prefix('+').unwrap_or(token)),
+    };
+    let (digits, radix) = if let Some(hex) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        (hex, 16)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        (&digits[1..], 8)
+    } else {
+        (digits, 10)
+    };
+    if !digits.chars().next()?.is_digit(radix) {
+        return None;
+    }
+    let value = i64::from_str_radix(digits, radix).ok()?;
+    Some(if negative { -value } else { value })
+}
+
+#[derive(Default)]
+struct LazyBuilder {
+    glyph_lines: Vec<Range<usize>>,
+    index: BTreeMap<char, usize>,
+    glyphs: Vec<Range<usize>>,
+    sum_width: usize,
+    // Number of required ASCII glyphs, which the spacing hint is based on.
+    required: usize,
+}
+
+impl LazyBuilder {
+    /// Later definitions of the same character replace earlier ones, as in C figlet.
+    fn add(&mut self, ch: char, rows: Vec<Row>) {
+        if (' '..='~').contains(&ch) {
+            self.sum_width += rows.iter().map(|(_, w)| *w).max().unwrap_or(0);
+            self.required += 1;
+        }
+        let start = self.glyph_lines.len();
+        self.glyph_lines.extend(rows.into_iter().map(|(r, _)| r));
+        self.index.insert(ch, self.glyphs.len());
+        self.glyphs.push(start..self.glyph_lines.len());
+    }
 }
 
 fn decode_glyph(lazy: &LazyFigletSource, idx: usize) -> Glyph {
-    let start = lazy.glyph_line_start[idx] as usize;
-    let len = lazy.glyph_line_len[idx] as usize;
+    let rows = &lazy.glyph_lines[lazy.glyphs[idx].clone()];
     let mut parts = Vec::new();
     let mut max_width = 0usize;
 
-    for row in 0..len {
+    for (row, r) in rows.iter().enumerate() {
         if row > 0 {
             parts.push(GlyphPart::NewLine);
         }
-        let r = &lazy.glyph_lines[start + row];
-        // Lines are split on '\n', which never occurs inside a multi-byte sequence,
-        // and the whole buffer was validated at parse time.
-        let s = std::str::from_utf8(&lazy.bytes[r.clone()]).unwrap_or("");
+        let line = lazy.encoding.decode(&lazy.bytes[r.clone()]);
         let mut line_width = 0usize;
-        for ch in s.chars() {
+        for ch in line.chars() {
             if ch == lazy.hard_blank {
                 parts.push(GlyphPart::HardBlank);
             } else {
@@ -575,7 +676,7 @@ fn decode_glyph(lazy: &LazyFigletSource, idx: usize) -> Glyph {
 
     Glyph {
         width: max_width,
-        height: len,
+        height: rows.len(),
         parts,
     }
 }

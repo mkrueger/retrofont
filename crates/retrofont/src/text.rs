@@ -43,7 +43,9 @@ pub enum MissingGlyph {
     /// Fail with [`FontError::UnknownChar`].
     #[default]
     Error,
-    /// Leave the character out.
+    /// Leave the character out. Like figlet, FIGlet fonts render their
+    /// missing-character glyph (code 0) instead if they define one, and the
+    /// gap prevents the next glyph from being smushed.
     Skip,
 }
 
@@ -285,21 +287,27 @@ fn layout_mode(font: &Font, layout_choice: Layout) -> u32 {
     }
 }
 
-fn glyph_rows(font: &Font, ch: char, options: &TextOptions) -> Result<Option<Rc<GlyphRows>>> {
+fn glyph_rows(font: &Font, ch: char, options: &TextOptions) -> Result<Rc<GlyphRows>> {
     if let Some(glyph) = font.resolve_char(ch).and_then(|c| font.glyph(c)) {
-        return Ok(Some(Rc::new(GlyphRows::from_glyph(glyph, &options.render))));
+        return Ok(Rc::new(GlyphRows::from_glyph(glyph, &options.render)));
     }
     if ch == ' ' {
         // Hard blanks keep the gap between words from being kerned away.
         let width = font.spacing().unwrap_or(1);
-        return Ok(Some(Rc::new(GlyphRows {
+        return Ok(Rc::new(GlyphRows {
             width,
             rows: vec![vec![Slot::HardBlank(None); width]],
-        })));
+        }));
     }
     match options.missing {
         MissingGlyph::Error => Err(FontError::UnknownChar(ch)),
-        MissingGlyph::Skip => Ok(None),
+        MissingGlyph::Skip => Ok(Rc::new(match font.glyph('\0') {
+            Some(glyph) => GlyphRows::from_glyph(glyph, &options.render),
+            None => GlyphRows {
+                width: 0,
+                rows: Vec::new(),
+            },
+        })),
     }
 }
 
@@ -327,9 +335,7 @@ fn layout_paragraph(
         if wrapped && ch == ' ' && items.is_empty() {
             continue;
         }
-        let Some(glyph) = glyph_rows(font, ch, options)? else {
-            continue;
-        };
+        let glyph = glyph_rows(font, ch, options)?;
         if let Some(max_width) = options.max_width
             && !items.is_empty()
         {

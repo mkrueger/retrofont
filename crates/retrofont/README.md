@@ -232,7 +232,12 @@ For zero-copy loading of an owned buffer, use `Font::load_owned` or
 - Supports hard blanks (non-breaking spaces)
 - Horizontal kerning and smushing as specified by the font header
 - ZIP archive support for compressed fonts
-- Character range: ASCII printable + extended
+- Character range: ASCII printable, the German letters (ÄÖÜäöüß) and code-tagged
+  characters anywhere in Unicode (`FigletFont::add_char` accepts any `char`)
+- UTF-8 fonts, with a Latin-1 fallback for older fonts
+- Glyphs are read like figlet reads them: any end-mark character, blank glyphs are
+  defined with zero width, and `MissingGlyph::Skip` renders the font's code-0
+  glyph if it has one
 
 ### TdfFont
 
